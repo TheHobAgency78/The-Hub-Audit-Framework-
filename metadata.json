@@ -1,0 +1,6 @@
+{
+  "name": "The Hub Algorithm Audit Dashboard",
+  "description": "منصة فحص V1 وصناعة التقارير الخوارزمية والتجارية لحسابات العملاء المعتمدة لوكالة THE HUB لتشخيص فجوات وصول المحتوى وقنوات تسييل الأرقام.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
