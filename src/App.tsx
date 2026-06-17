@@ -37,11 +37,19 @@ export default function App() {
   const [loadingLogs, setLoadingLogs] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sharedError, setSharedError] = useState<string | null>(null);
+  const [isViewerMode, setIsViewerMode] = useState<boolean>(false);
 
   // Check for shared report ID in URL on load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const shareId = params.get('share') || params.get('reportId');
+    const hasShareParam = window.location.search.includes('share') || window.location.search.includes('reportId');
+    
+    if (hasShareParam) {
+      setIsViewerMode(true);
+      document.body.classList.add('viewer-mode');
+    }
+
     if (shareId) {
       setSharedLoading(true);
       setErrorMessage(null);
@@ -181,38 +189,40 @@ export default function App() {
           </div>
 
           {/* Navigation Controls */}
-          <nav className="flex items-center gap-1" id="nav-tabs">
-            <button
-              onClick={() => setActiveTab('create')}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
-                activeTab === 'create'
-                  ? 'bg-hub-accent text-white shadow'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              محلل فحص جديد V1
-            </button>
-            <button
-              onClick={() => setActiveTab('reports')}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
-                activeTab === 'reports'
-                  ? 'bg-hub-accent text-white shadow'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              التقارير المولدة ({savedAudits.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('compare')}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
-                activeTab === 'compare'
-                  ? 'bg-hub-accent text-white shadow'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              لوحة مقارنة الحسابات
-            </button>
-          </nav>
+          {!isViewerMode && (
+            <nav className="flex items-center gap-1" id="nav-tabs">
+              <button
+                onClick={() => setActiveTab('create')}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
+                  activeTab === 'create'
+                    ? 'bg-hub-accent text-white shadow'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                محلل فحص جديد V1
+              </button>
+              <button
+                onClick={() => setActiveTab('reports')}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
+                  activeTab === 'reports'
+                    ? 'bg-hub-accent text-white shadow'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                التقارير المولدة ({savedAudits.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('compare')}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
+                  activeTab === 'compare'
+                    ? 'bg-hub-accent text-white shadow'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                لوحة مقارنة الحسابات
+              </button>
+            </nav>
+          )}
 
           {/* Status Badge */}
           <div className="hidden md:flex items-center gap-2 text-xs bg-hub-bg border border-hub-border/60 rounded-full py-1 px-3">
@@ -397,41 +407,43 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
                 {/* Reports visual navigation sidebar */}
-                <div className="col-span-1 lg:col-span-3 bg-hub-card border border-hub-border rounded-xl p-4 no-print">
-                  <h3 className="text-xs font-black text-white pb-2 mb-3 border-b border-hub-border">اختر التقرير لمعاينته:</h3>
-                  {savedAudits.length === 0 ? (
-                    <p className="text-xs text-gray-500">لا توجد تقارير منشأة حالياً.</p>
-                  ) : (
-                    <div className="space-y-1 max-h-[450px] overflow-y-auto pr-1">
-                      {savedAudits.map((audit) => (
-                        <button
-                          key={audit.id}
-                          onClick={() => setCurrentReport(audit)}
-                          className={`w-full text-right px-3 py-2 text-xs rounded-lg transition-all flex items-center justify-between cursor-pointer ${
-                            currentReport.id === audit.id
-                              ? 'bg-hub-accent/15 border border-hub-accent/40 text-white font-bold'
-                              : 'text-gray-400 hover:bg-hub-bg/60 border border-transparent'
-                          }`}
-                        >
-                          <span className="truncate flex-1 pl-2">{audit.inputData.clientName}</span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-black/30 text-hub-gold-light">{audit.hubScore}</span>
-                        </button>
-                      ))}
+                {!isViewerMode && (
+                  <div className="col-span-1 lg:col-span-3 bg-hub-card border border-hub-border rounded-xl p-4 no-print reports-sidebar">
+                    <h3 className="text-xs font-black text-white pb-2 mb-3 border-b border-hub-border">اختر التقرير لمعاينته:</h3>
+                    {savedAudits.length === 0 ? (
+                      <p className="text-xs text-gray-500">لا توجد تقارير منشأة حالياً.</p>
+                    ) : (
+                      <div className="space-y-1 max-h-[450px] overflow-y-auto pr-1">
+                        {savedAudits.map((audit) => (
+                          <button
+                            key={audit.id}
+                            onClick={() => setCurrentReport(audit)}
+                            className={`w-full text-right px-3 py-2 text-xs rounded-lg transition-all flex items-center justify-between cursor-pointer ${
+                              currentReport.id === audit.id
+                                ? 'bg-hub-accent/15 border border-hub-accent/40 text-white font-bold'
+                                : 'text-gray-400 hover:bg-hub-bg/60 border border-transparent'
+                            }`}
+                          >
+                            <span className="truncate flex-1 pl-2">{audit.inputData.clientName}</span>
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-black/30 text-hub-gold-light">{audit.hubScore}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-4 pt-3 border-t border-hub-border">
+                      <button
+                        onClick={() => setActiveTab('create')}
+                        className="w-full py-2 bg-hub-accent hover:bg-hub-accent-hover text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        إنشاء فحص جديد
+                      </button>
                     </div>
-                  )}
-                  <div className="mt-4 pt-3 border-t border-hub-border">
-                    <button
-                      onClick={() => setActiveTab('create')}
-                      className="w-full py-2 bg-hub-accent hover:bg-hub-accent-hover text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      إنشاء فحص جديد
-                    </button>
                   </div>
-                </div>
+                )}
 
                 {/* Main analytical result presentation representation */}
-                <div className="col-span-1 lg:col-span-9">
+                <div className={isViewerMode ? "col-span-12 w-full" : "col-span-1 lg:col-span-9"}>
                   <AuditResultView report={currentReport} savedAudits={savedAudits} />
                 </div>
               </div>

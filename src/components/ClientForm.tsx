@@ -3,10 +3,91 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClientDataInput } from '../types';
 import { PRESET_CLIENTS, PresetClient } from './presets';
-import { Sparkles, BarChart2, Radio, UserCheck, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Sparkles, BarChart2, Radio, UserCheck, HelpCircle, AlertTriangle, ClipboardList, FileText, CheckCircle2, Trash2, Bot, ChevronLeft, ChevronRight, Sliders, Eye, EyeOff } from 'lucide-react';
+
+function calculateLivePredictiveScore(formData: ClientDataInput) {
+  let score = 50;
+
+  // 1. Hook Retention
+  if (formData.first3sRetention) {
+    const val = formData.first3sRetention;
+    const num = parseInt(val.replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(num)) {
+      if (num >= 65) score += 18;
+      else if (num >= 45) score += 10;
+      else if (num >= 25) score += 3;
+      else score -= 12;
+    } else {
+      const t = val.toLowerCase();
+      if (t.includes('ممتاز') || t.includes('جاذب') || t.includes('قوي')) score += 12;
+      if (t.includes('ضعيف') || t.includes('تسرب') || t.includes('قليل')) score -= 10;
+    }
+  }
+
+  // 2. Watch Time / Completion
+  if (formData.watchTimeCompletion) {
+    const val = formData.watchTimeCompletion;
+    const num = parseInt(val.replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(num)) {
+      if (num >= 45) score += 18;
+      else if (num >= 25) score += 10;
+      else if (num >= 12) score += 3;
+      else score -= 12;
+    } else {
+      const t = val.toLowerCase();
+      if (t.includes('ممتاز') || t.includes('كامل') || t.includes('مرتفع')) score += 12;
+      if (t.includes('ضعيف') || t.includes('منخفض') || t.includes('تراجع')) score -= 10;
+    }
+  }
+
+  // 3. Engagement
+  const l = parseInt(formData.averageLikes || '0', 10);
+  const c = parseInt(formData.averageComments || '0', 10);
+  const sh = parseInt(formData.averageShares || '0', 10);
+  const sa = parseInt(formData.averageSaves || '0', 10);
+  if (l > 0 || c > 0 || sh > 0 || sa > 0) {
+    const total = l + c * 3 + sh * 5 + sa * 4;
+    if (total >= 400) score += 12;
+    else if (total >= 100) score += 6;
+    else score -= 4;
+  }
+
+  // 4. Posting Frequency
+  if (formData.postingFrequency) {
+    const f = formData.postingFrequency;
+    if (f.includes('يومي') || f.includes('بانتظام') || f.includes('3 مقاطع يومياً')) score += 8;
+    else if (f.includes('عشوائي') || f.includes('متقطع') || f.includes('أسبوعين')) score -= 12;
+  }
+
+  // 5. Community Interaction
+  if (formData.communityInteraction) {
+    const comm = formData.communityInteraction;
+    if (comm.includes('سريعة') || comm.includes('حيوية') || comm.includes('ردود سريعة')) score += 8;
+    else if (comm.includes('إهمال') || comm.includes('تجاهل') || comm.includes('نهمل')) score -= 12;
+  }
+
+  // Bound between 12 and 94
+  score = Math.max(12, Math.min(94, score));
+
+  let status = 'منخفض حرج (نزيف)';
+  let color = 'text-hub-rose border-hub-rose/30 bg-hub-rose/10';
+  let desc = 'الحساب يواجه خللاً خوارزمياً يمنعه من الانتشار أو المبيعات العالية.';
+  
+  if (score >= 75) {
+    status = 'آمن متميز (نمو واعد)';
+    color = 'text-[#3FB950] border-emerald-500/30 bg-[#3FB950]/10';
+    desc = 'مؤشرات قوية وجاذبة للجمهور. الحساب يحتاج فقط لهندسة تسييل أفضل.';
+  } else if (score >= 45) {
+    status = 'تراجع متوسط (تذبذب)';
+    color = 'text-hub-gold-light border-hub-gold/30 bg-[#ff6600]/10';
+    desc = 'أداء متوسط شابه تذبذب جزئي في معدل الاحتفاظ أو فواصل في النشر.';
+  }
+
+  return { score, status, color, desc };
+}
 
 interface ClientFormProps {
   onSubmit: (data: ClientDataInput) => void;
@@ -14,26 +95,223 @@ interface ClientFormProps {
 }
 
 export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
-  const [formData, setFormData] = useState<ClientDataInput>({
-    clientName: '',
-    niche: '',
-    platform: 'instagram',
-    followersCount: '',
-    activeCommunitySize: '',
-    first3sRetention: '',
-    watchTimeCompletion: '',
-    averageLikes: '',
-    averageComments: '',
-    averageShares: '',
-    averageSaves: '',
-    contentHooksExample: '',
-    contentCaptionStyle: '',
-    postingFrequency: '',
-    communityInteraction: '',
-    customNotes: ''
+  const [formData, setFormData] = useState<ClientDataInput>(() => {
+    return {
+      clientName: localStorage.getItem('hub_clientName') || '',
+      niche: localStorage.getItem('hub_niche') || '',
+      platform: (localStorage.getItem('hub_platform') as ClientDataInput['platform']) || 'instagram',
+      followersCount: localStorage.getItem('hub_followersCount') || '',
+      activeCommunitySize: localStorage.getItem('hub_activeCommunitySize') || '',
+      first3sRetention: localStorage.getItem('hub_first3sRetention') || '',
+      watchTimeCompletion: localStorage.getItem('hub_watchTimeCompletion') || '',
+      averageLikes: localStorage.getItem('hub_averageLikes') || '',
+      averageComments: localStorage.getItem('hub_averageComments') || '',
+      averageShares: localStorage.getItem('hub_averageShares') || '',
+      averageSaves: localStorage.getItem('hub_averageSaves') || '',
+      contentHooksExample: localStorage.getItem('hub_contentHooksExample') || '',
+      contentCaptionStyle: localStorage.getItem('hub_contentCaptionStyle') || '',
+      postingFrequency: localStorage.getItem('hub_postingFrequency') || '',
+      communityInteraction: localStorage.getItem('hub_communityInteraction') || '',
+      customNotes: localStorage.getItem('hub_customNotes') || ''
+    };
   });
 
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+  const [showManualFields, setShowManualFields] = useState<boolean>(false);
+
+  const livePredictive = calculateLivePredictiveScore(formData);
+
+  // Define steps for our Interactive Wizard Bot
+  const wizardSteps = [
+    {
+      name: 'clientName',
+      title: 'اسم العميل والعلامة التجارية',
+      question: 'مرحباً بك في مُعالج الفحص الرقمي لـ THE HUB. ما هو اسم العميل الخاضع للفحص؟ 🏢',
+      placeholder: 'مثال: شركة إرث العقارية',
+      type: 'text',
+      fieldKeys: ['clientName'],
+      presetChips: ['تمور المدينة الفاخرة', 'قهوة سبيشالتي هاب', 'مجوهرات الأرجوان', 'نخبة العطور العالمية', 'مجموعة لوسين العقارية']
+    },
+    {
+      name: 'niche',
+      title: 'المجال والنشاط التجاري',
+      question: 'ممتاز! وما هو مجال عمل العميل بالتفصيل وطبيعة تخصصه التجاري؟ 💼',
+      placeholder: 'مثال: تسويق القصور السكنية الفاخرة أو بيع العطور المباشرة',
+      type: 'text',
+      fieldKeys: ['niche'],
+      presetChips: ['عقارات وقصور فاخرة', 'مطاعم وكافيهات مختصة', 'عطور ومستحضرات تجميل', 'عيادات طب الاسنان والتجميل', 'متاجر ملابس وأزياء', 'استشارات وحلول تدريبية']
+    },
+    {
+      name: 'platform',
+      title: 'المنصة المستهدفة بالتحليل',
+      question: 'على أي منصة يتركز نشاطه الأساسي المستهدف بالتحليل خوارزمياً؟ 📱',
+      type: 'select',
+      options: [
+        { value: 'instagram', label: 'إنستغرام ريلز (Instagram Reels)' },
+        { value: 'tiktok', label: 'تيك توك (TikTok Videos)' },
+        { value: 'youtube_shorts', label: 'يوتيوب شورتس (YouTube Shorts)' },
+        { value: 'x', label: 'منصة إكس (X / Twitter Content)' },
+        { value: 'all', label: 'كل المنصات كحزمة متكاملة (All Platforms)' }
+      ],
+      fieldKeys: ['platform']
+    },
+    {
+      name: 'followersCount',
+      title: 'عدد المتابعين الإجمالي',
+      question: 'كم عدد المتابعين الحاليين على الحساب أو المنصة التي تم اختيارها؟ 📊',
+      placeholder: 'مثال: 50,000',
+      type: 'text',
+      fieldKeys: ['followersCount'],
+      presetChips: ['5,000', '15,000', '50,000', '120,000', '500,000', '1,000,000']
+    },
+    {
+      name: 'activeCommunitySize',
+      title: 'حجم ونشاط المجتمع الفعلي المتفاعل',
+      question: 'رائع! وما هو حجم ونشاط المجتمع الفعلي المتفاعل بانتظام (الجمهور الحقيقي)؟ 👥',
+      placeholder: 'مثال: أقل من 100 شخص بانتظام أو متفاعل ضعيف جداً',
+      type: 'text',
+      fieldKeys: ['activeCommunitySize'],
+      presetChips: ['خامل بالكامل وشبه منعدم', 'جمهور معقول بمثابرة متوسطة', 'نشط جداً ويبحث عن تفاعل مالي', 'نخبة متفاعلة تشتري بوعي']
+    },
+    {
+      name: 'first3sRetention',
+      title: 'نسبة الاحتفاظ في أول 3 ثوانٍ (Hook %)',
+      question: 'لندخل في الأرقام العميقة: كم نسبة الاحتفاظ في أول 3 ثوانٍ (Hook % - نسبة جذب الانتباه)؟ ⏳',
+      placeholder: 'مثال: 25% أو ضعيفة جداً وتتسرب سريعاً',
+      type: 'text',
+      fieldKeys: ['first3sRetention'],
+      presetChips: ['15% (ضعيف للتطلعات)', '35% (متوسط عادي)', '55% (ممتاز وجاذب)', '75% (استثنائي وقوي)']
+    },
+    {
+      name: 'watchTimeCompletion',
+      title: 'نسبة إكمال الفيديو الكلي (Watch rate)',
+      question: 'وما هي نسبة إكمال الفيديو الكلي في المتوسط (Watch Time Completion) لو تتوفر؟ 🔄',
+      placeholder: 'مثال: 12% أو منخفض للغاية',
+      type: 'text',
+      fieldKeys: ['watchTimeCompletion'],
+      presetChips: ['5% (ضعيف جداً وتتسرب الفائدة)', '15% (متوسط للقطاع)', '30% (ناجح وجاذب)', '50% (نادر ومثالي)']
+    },
+    {
+      name: 'engagement',
+      title: 'متوسط الأرقام التفاعلية لبيانات الفحص',
+      question: 'يرجى تزويدي ببيانات التفاعل الوسطية لكل منشور لمطابقة خوارزميات HUB SCORE: 📈',
+      type: 'engagement_group',
+      fieldKeys: ['averageLikes', 'averageComments', 'averageShares', 'averageSaves']
+    },
+    {
+      name: 'contentHooksExample',
+      title: 'أمثلة على الخطافات والعناوين الحالية',
+      question: 'ما هي صياغة العناوين والخطافات (Hooks) المستعملة حالياً في مقاطع الفيديو الخاصة به؟ 🎤',
+      placeholder: 'مثال: "شاهد الفخامة معنا" أو استعراض روتيني جداً بدون خطاف كلامي',
+      type: 'textarea',
+      fieldKeys: ['contentHooksExample'],
+      presetChips: ['استعراض موسيقي صامت دون تفاعل كلامي', 'سؤال مستفز أو صادم بأول ثانيتين', 'الكشف عن السعر أو النتيجة فورياً', 'خطاف تقليدي باهت (هيا بنا نشاهد كذا)']
+    },
+    {
+      name: 'contentCaptionStyle',
+      title: 'أسلوب وصياغة الوصف والهاشتاغات',
+      question: 'كيف تتم صياغة الوصف (Caption) أسفل الفيديوهات؟ هل نكتب تفاصيل مفرطة وسعر أم قليل تفاعل؟ 📝',
+      placeholder: 'مثال: نكتب السعر مع 20 هاشتاغ مكرر أو نترك الوصف فارغاً',
+      type: 'textarea',
+      fieldKeys: ['contentCaptionStyle'],
+      presetChips: ['وصف طويل جداً وممل مع تفاصيل وعقود', 'وصف قصير بعبارة تفاعلية بليغة وجذابة', 'فارغ من الوصف والهاشتاغات', 'حشو من الهاشتاغات المكررة والروابط']
+    },
+    {
+      name: 'postingFrequency',
+      title: 'معدل وتيرة النشر والتواجد الرقمي',
+      question: 'ما هو معدل التواجد ونشر المحتوى ووتيرته المعتادة لديه؟ 🗓️',
+      placeholder: 'مثال: مقطع واحد كل أسبوعين بشكل متقطع',
+      type: 'text',
+      fieldKeys: ['postingFrequency'],
+      presetChips: ['نشر عشوائي غير منتظم', 'مقطع كل أسبوعين (متقطع)', '3 مقاطع أسبوعياً', 'مقطع واحد يومياً بانتظام', '3 مقاطع يومياً (مكثف)']
+    },
+    {
+      name: 'communityInteraction',
+      title: 'التفاعل مع التعليقات والـ DM الخاص',
+      question: 'كيف يتم الرد على الكومنتات والتفاعل على الخاص؟ هل نراسلهم أم نتجاهل؟ 💬',
+      placeholder: 'مثال: نكتب "تواصل معنا خاص" بدون فائدة حقيقية أو نهمل الرد تماماً',
+      type: 'text',
+      fieldKeys: ['communityInteraction'],
+      presetChips: ['الرد بكلمة خاص أو إهمال غريب', 'توجيه آلي للخاص دون تفاعل مكمل', 'ردود سريعة ومحترمة وحيوية', 'ردود متأخرة جداً تسرب المشترين']
+    },
+    {
+      name: 'customNotes',
+      title: 'الصعوبات الترويجية والملاحظات العميقة',
+      question: 'أخيراً، هل توجد أي ملاحظات إضافية، صعوبات تجارية، أو تحديات مبيعات معلنة للعميل؟ 🎯',
+      placeholder: 'مثال: صرف مبالغ هائلة على الإعلانات والتصوير ولكن لا توجد عوائد ومبيعات حقيقية بالرغم من زيادة المشاهدات العشوائية...',
+      type: 'textarea',
+      fieldKeys: ['customNotes'],
+      presetChips: ['مبالغ مالية هائلة للمونتاج والتمويل بدون عائد مبيعات', 'متابعين كثيرون ولكن لا يمكن تحويلهم لقناة البيع', 'عجز تام عن إقناع العملاء بالطلب أو الحجز', 'توقف الحساب عن النمو والانتشار مع قلة التفاعل']
+    }
+  ];
+
+  // Save changes to localStorage on any state mutation
+  useEffect(() => {
+    localStorage.setItem('hub_clientName', formData.clientName || '');
+    localStorage.setItem('hub_niche', formData.niche || '');
+    localStorage.setItem('hub_platform', formData.platform || 'instagram');
+    localStorage.setItem('hub_followersCount', formData.followersCount || '');
+    localStorage.setItem('hub_activeCommunitySize', formData.activeCommunitySize || '');
+    localStorage.setItem('hub_first3sRetention', formData.first3sRetention || '');
+    localStorage.setItem('hub_watchTimeCompletion', formData.watchTimeCompletion || '');
+    localStorage.setItem('hub_averageLikes', formData.averageLikes || '');
+    localStorage.setItem('hub_averageComments', formData.averageComments || '');
+    localStorage.setItem('hub_averageShares', formData.averageShares || '');
+    localStorage.setItem('hub_averageSaves', formData.averageSaves || '');
+    localStorage.setItem('hub_contentHooksExample', formData.contentHooksExample || '');
+    localStorage.setItem('hub_contentCaptionStyle', formData.contentCaptionStyle || '');
+    localStorage.setItem('hub_postingFrequency', formData.postingFrequency || '');
+    localStorage.setItem('hub_communityInteraction', formData.communityInteraction || '');
+    localStorage.setItem('hub_customNotes', formData.customNotes || '');
+  }, [formData]);
+
+  const clearDraftData = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (confirm('هل أنت متأكد من تصفير الحقول الحالية وبدء فحص جديد لعميل آخر؟')) {
+      const keys = [
+        'hub_clientName',
+        'hub_niche',
+        'hub_platform',
+        'hub_followersCount',
+        'hub_activeCommunitySize',
+        'hub_first3sRetention',
+        'hub_watchTimeCompletion',
+        'hub_averageLikes',
+        'hub_averageComments',
+        'hub_averageShares',
+        'hub_averageSaves',
+        'hub_contentHooksExample',
+        'hub_contentCaptionStyle',
+        'hub_postingFrequency',
+        'hub_communityInteraction',
+        'hub_customNotes'
+      ];
+      keys.forEach(k => localStorage.removeItem(k));
+      sessionStorage.removeItem('hub_quick_intake_text');
+      
+      setFormData({
+        clientName: '',
+        niche: '',
+        platform: 'instagram',
+        followersCount: '',
+        activeCommunitySize: '',
+        first3sRetention: '',
+        watchTimeCompletion: '',
+        averageLikes: '',
+        averageComments: '',
+        averageShares: '',
+        averageSaves: '',
+        contentHooksExample: '',
+        contentCaptionStyle: '',
+        postingFrequency: '',
+        communityInteraction: '',
+        customNotes: ''
+      });
+      setSelectedPresetId('');
+      setCurrentStepIndex(0);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -76,26 +354,300 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
           <p className="text-xs text-gray-400 mt-1">أدخل بيانات ومعايير العميل أو طبق أحد النماذج الافتراضية المعدة للتدريب والوكالة</p>
         </div>
 
-        {/* Dropdown presets selector */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-400 whitespace-nowrap">نماذج تدريب جاهزة:</label>
-          <select
-            value={selectedPresetId}
-            onChange={(e) => applyPreset(e.target.value)}
-            className="bg-hub-bg border border-hub-border text-xs rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-hub-gold transition-all cursor-pointer"
-            id="preset_selector"
+        {/* Dropdown presets selector and smart reset buttons */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-400 whitespace-nowrap">نماذج جاهزة:</label>
+            <select
+              value={selectedPresetId}
+              onChange={(e) => applyPreset(e.target.value)}
+              className="bg-hub-bg border border-hub-border text-xs rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-hub-gold transition-all cursor-pointer"
+              id="preset_selector"
+            >
+              <option value="">-- اختر نموذج جاهز للتعبئة الأوتوماتيكية --</option>
+              {PRESET_CLIENTS.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name} ({client.niche})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={clearDraftData}
+            className="px-3 py-2 rounded-lg text-xs font-bold transition-all bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/40 active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+            id="clear-form-draft-btn"
+            title="إنشاء فحص جديد (تصفير الحقول)"
           >
-            <option value="">-- اختر نموذج جاهز للتعبئة الفورية --</option>
-            {PRESET_CLIENTS.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.name} ({client.niche})
-              </option>
-            ))}
-          </select>
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>إنشاء فحص جديد (تصفير الحقول)</span>
+          </button>
         </div>
       </div>
 
-      <form onSubmit={handleFormSubmit} className="space-y-4">
+      {/* 🚀 INTERACTIVE WIZARD BOT (GLASSMORPHISM STYLE) */}
+      <div 
+        className="transition-all duration-300 rounded-2xl p-5 mb-6 text-right border relative overflow-hidden shadow-[0_8px_32px_rgba(255,102,0,0.06)] bg-black/60 backdrop-blur-md"
+        style={{ 
+          borderColor: 'rgba(255, 102, 0, 0.25)'
+        }}
+        id="interactive-wizard-bot-section"
+      >
+        {/* Neon decorative background glow */}
+        <div className="absolute top-0 left-0 w-24 h-24 bg-[#ff6600]/10 rounded-full blur-2xl pointer-events-none" />
+        
+        {/* Bot Chat Header */}
+        <div className="flex items-center justify-between gap-3 border-b border-hub-border pb-3 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="relative">
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-black animate-pulse" />
+              <Bot className="w-6 h-6 text-[#ff6600] animate-bounce" style={{ animationDuration: '4s' }} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white flex items-center gap-1.5">
+                مُساعد الفحص الذكي: THE HUB BOT
+                <span className="text-[9px] font-bold bg-[#ff6600]/10 text-[#ff6600] border border-[#ff6600]/30 px-1.5 py-0.5 rounded-full">نشط</span>
+              </h3>
+              <p className="text-[10px] text-gray-400 mt-0.5">دردشة تفاعلية لجمع وتحليل مؤشرات ومعايير العميل خطوة بخطوة</p>
+            </div>
+          </div>
+
+          <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1 bg-[#161B22] border border-hub-border px-2.5 py-1 rounded-lg">
+            <span>خطوة {currentStepIndex + 1} من {wizardSteps.length}</span>
+          </div>
+        </div>
+
+        {/* Progress Bar & Live Score Health Predictor Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5 border-b border-hub-border/30 pb-4">
+          {/* Progress Bar */}
+          <div>
+            <div className="flex justify-between items-center text-[10px] text-gray-400 mb-1.5">
+              <span>اكتمال حقول المعالج الذكي</span>
+              <span className="text-[#ff6600] font-black">{Math.round(((currentStepIndex + 1) / wizardSteps.length) * 100)}%</span>
+            </div>
+            <div className="w-full bg-hub-bg h-1.5 rounded-full overflow-hidden border border-hub-border/50">
+              <div 
+                className="bg-gradient-to-l from-[#ff6600] to-amber-500 h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(255,102,0,0.5)]"
+                style={{ width: `${((currentStepIndex + 1) / wizardSteps.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Live Score Predictor (orange-glass design) */}
+          <div className="bg-gradient-to-r from-slate-900/80 to-black/40 border border-[#ff6600]/20 rounded-xl p-2.5 flex items-center gap-3 shadow-inner">
+            <div className="relative flex items-center justify-center w-11 h-11 bg-black/50 border border-hub-border rounded-full flex-shrink-0">
+              <div className="absolute inset-0 bg-[#ff6600]/5 blur-sm rounded-full" />
+              <span className="text-xs font-black text-white z-10">{livePredictive.score}</span>
+              <span className="text-[7px] text-gray-400 absolute bottom-1 font-mono">HUB SCORE</span>
+            </div>
+            <div className="flex-1 text-right min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-[9px] text-gray-400">التنبؤ المباشر بصحة الحساب:</span>
+                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${livePredictive.color}`}>
+                  {livePredictive.status}
+                </span>
+              </div>
+              <p className="text-[9px] text-gray-400 leading-snug truncate">
+                {livePredictive.desc}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Bot Question Chat Bubble styled */}
+        <div className="space-y-4">
+          <div className="flex gap-3 items-start text-right">
+            <div className="w-8 h-8 rounded-full bg-[#ff6600]/10 border border-[#ff6600]/30 flex items-center justify-center flex-shrink-0 animate-pulse">
+              <Bot className="w-4 h-4 text-[#ff6600]" />
+            </div>
+            <div className="flex-1 bg-black/40 border border-hub-border/50 rounded-2xl p-4 text-xs md:text-sm text-gray-100 leading-relaxed shadow-lg relative">
+              <span className="text-[10px] text-[#ff6600] block mb-1 font-mono tracking-wider">مُعالج THE HUB V1 🤖</span>
+              <p className="font-bold text-gray-100">{wizardSteps[currentStepIndex].question}</p>
+              
+              {/* Dynamic Answer Fields */}
+              <div className="mt-4">
+                {wizardSteps[currentStepIndex].type === 'text' && (
+                  <input
+                    type="text"
+                    name={wizardSteps[currentStepIndex].name}
+                    placeholder={wizardSteps[currentStepIndex].placeholder}
+                    value={formData[wizardSteps[currentStepIndex].name as keyof ClientDataInput] || ''}
+                    onChange={handleInputChange}
+                    className="w-full bg-[#161B22] border border-hub-border text-white text-xs md:text-sm rounded-lg p-2.5 focus:border-[#ff6600] focus:ring-1 focus:ring-[#ff6600] focus:outline-none transition-all placeholder:text-gray-600"
+                    id={`wizard_input_${wizardSteps[currentStepIndex].name}`}
+                    autoFocus
+                  />
+                )}
+
+                {wizardSteps[currentStepIndex].type === 'select' && (
+                  <select
+                    name={wizardSteps[currentStepIndex].name}
+                    value={formData[wizardSteps[currentStepIndex].name as keyof ClientDataInput] || 'instagram'}
+                    onChange={handleInputChange}
+                    className="w-full bg-[#161B22] border border-hub-border text-white text-xs md:text-sm rounded-lg p-2.5 focus:border-[#ff6600] focus:outline-none cursor-pointer transition-all"
+                    id={`wizard_input_${wizardSteps[currentStepIndex].name}`}
+                  >
+                    {wizardSteps[currentStepIndex].options?.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {wizardSteps[currentStepIndex].type === 'textarea' && (
+                  <textarea
+                    name={wizardSteps[currentStepIndex].name}
+                    rows={3}
+                    placeholder={wizardSteps[currentStepIndex].placeholder}
+                    value={formData[wizardSteps[currentStepIndex].name as keyof ClientDataInput] || ''}
+                    onChange={handleInputChange}
+                    className="w-full bg-[#161B22] border border-hub-border text-white text-xs md:text-sm rounded-lg p-2.5 focus:border-[#ff6600] focus:ring-1 focus:ring-[#ff6600] focus:outline-none resize-none transition-all placeholder:text-gray-600 leading-normal"
+                    id={`wizard_input_${wizardSteps[currentStepIndex].name}`}
+                  />
+                )}
+
+                {wizardSteps[currentStepIndex].type === 'engagement_group' && (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 bg-[#0d1117] p-3 rounded-xl border border-hub-border/50 text-right">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-gray-400">متوسط الإعجابات / مقطع</label>
+                      <input
+                        type="text"
+                        name="averageLikes"
+                        placeholder="مثال: 20"
+                        value={formData.averageLikes}
+                        onChange={handleInputChange}
+                        className="bg-[#161B22] border border-hub-border text-xs text-white rounded p-2 focus:border-[#ff6600] focus:outline-none text-right"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-gray-400">متوسط التعليقات / مقطع</label>
+                      <input
+                        type="text"
+                        name="averageComments"
+                        placeholder="مثال: 3"
+                        value={formData.averageComments}
+                        onChange={handleInputChange}
+                        className="bg-[#161B22] border border-hub-border text-xs text-white rounded p-2 focus:border-[#ff6600] focus:outline-none text-right"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-gray-400">متوسط مشاركات (Shares)</label>
+                      <input
+                        type="text"
+                        name="averageShares"
+                        placeholder="مثال: 1"
+                        value={formData.averageShares}
+                        onChange={handleInputChange}
+                        className="bg-[#161B22] border border-hub-border text-xs text-white rounded p-2 focus:border-[#ff6600] focus:outline-none text-right"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-gray-400">متوسط الحفظ (Saves)</label>
+                      <input
+                        type="text"
+                        name="averageSaves"
+                        placeholder="مثال: 4"
+                        value={formData.averageSaves}
+                        onChange={handleInputChange}
+                        className="bg-[#161B22] border border-hub-border text-xs text-white rounded p-2 focus:border-[#ff6600] focus:outline-none text-right"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Preset Chips (Buttons) for Instant Interactive Fill */}
+                {wizardSteps[currentStepIndex].presetChips && wizardSteps[currentStepIndex].presetChips!.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-hub-border/25 text-right">
+                    <span className="text-[10px] text-[#ff6600]/90 block mb-2 font-bold leading-none">خيارات الإدخال السريع ⚡:</span>
+                    <div className="flex flex-wrap gap-1.5 justify-start">
+                      {wizardSteps[currentStepIndex].presetChips!.map((chip, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            const fieldName = wizardSteps[currentStepIndex].name;
+                            const updated = { ...formData, [fieldName]: chip };
+                            setFormData(updated);
+                          }}
+                          className="px-2.5 py-1 text-[10px] md:text-xs rounded-full bg-slate-900/60 hover:bg-[#ff6600]/25 text-gray-300 hover:text-white border border-hub-border hover:border-[#ff6600]/40 transition-all font-semibold cursor-pointer select-none active:scale-95"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation and Submission Buttons within the chat bot */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
+            {/* Back button */}
+            <button
+              type="button"
+              disabled={currentStepIndex === 0}
+              onClick={(e) => {
+                e.preventDefault();
+                if (currentStepIndex > 0) setCurrentStepIndex(prev => prev - 1);
+              }}
+              className={`px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                currentStepIndex === 0
+                  ? 'bg-hub-border/20 text-gray-600 cursor-not-allowed'
+                  : 'bg-[#161B22] hover:bg-slate-800 text-gray-200 border border-hub-border hover:border-gray-500'
+              }`}
+            >
+              <ChevronRight className="w-4 h-4" />
+              <span>السابق</span>
+            </button>
+
+            {/* Next or Auditing trigger button */}
+            {currentStepIndex < wizardSteps.length - 1 ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentStepIndex(prev => prev + 1);
+                }}
+                className="px-5 py-2 rounded-lg font-bold text-white bg-[#ff6600] hover:bg-orange-600 hover:shadow-[0_0_15px_rgba(255,102,0,0.15)] flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+              >
+                <span>السؤال التالي</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleFormSubmit}
+                disabled={isLoading}
+                className="px-6 py-2.5 rounded-lg text-xs md:text-sm font-black text-white bg-gradient-to-r from-[#ff6600] to-amber-500 hover:to-amber-600 shadow-[0_0_15px_rgba(255,102,0,0.3)] animate-pulse hover:shadow-[0_0_20px_rgba(255,102,0,0.5)] flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                style={{ animationDuration: '3s' }}
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>إطلاق المحرك الخوارزمي الآن</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Manual Fields Visibility Controls Toggler */}
+      <div className="flex justify-center mb-6" id="manual-fields-toggle-container">
+        <button
+          id="manual-fields-toggle-btn"
+          type="button"
+          onClick={() => setShowManualFields(!showManualFields)}
+          className="text-xs font-bold px-4 py-2 bg-slate-800/40 hover:bg-slate-800 border border-hub-border rounded-full hover:border-[#ff6600] text-gray-300 hover:text-white transition-all flex items-center gap-2 cursor-pointer"
+        >
+          <Sliders className="w-3.5 h-3.5 text-orange-400" />
+          <span>{showManualFields ? 'إخفاء لوحة الحقول لقصر التركيز على البوت' : 'تعديل يدوي مباشر لكامل الحقول بالأسفل'}</span>
+          {showManualFields ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+
+      {showManualFields && (
+        <form onSubmit={handleFormSubmit} className="space-y-4">
         {/* SECTION 1: MAIN METRICS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Client Name */}
@@ -383,6 +935,7 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
           </button>
         </div>
       </form>
+      )}
     </div>
   );
 }

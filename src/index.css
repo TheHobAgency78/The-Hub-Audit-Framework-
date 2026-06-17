@@ -24,6 +24,13 @@ body {
   direction: rtl; /* Set default text direction to RTL for beautiful Arabic layout */
 }
 
+/* Prevent word slicing and force complete word wrapping for Arabic standard typography */
+p, span, h1, h2, h3, h4, h5, h6, li, button, textarea, input, select, option {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+
 /* Print Styling for reports export */
 @media print {
   body {
@@ -42,3 +49,26 @@ body {
     page-break-inside: avoid;
   }
 }
+
+/* 🔒 Secure & Silent Client Viewer Mode Rules */
+body.viewer-mode #interactive-wizard-bot-section,
+body.viewer-mode #manual-fields-toggle-container,
+body.viewer-mode #manual-fields-toggle-btn,
+body.viewer-mode #clear-form-draft-btn,
+body.viewer-mode #share-card-trigger-btn,
+body.viewer-mode #nav-tabs,
+body.viewer-mode #saved_sidebar,
+body.viewer-mode #preset_selector,
+body.viewer-mode label[for="preset_selector"] {
+  display: none !important;
+}
+
+body.viewer-mode .reports-sidebar {
+  display: none !important;
+}
+
+body.viewer-mode .grid {
+  /* Ensure full-width container on viewer mode */
+  grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+}
+

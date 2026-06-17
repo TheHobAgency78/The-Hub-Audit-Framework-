@@ -36,6 +36,272 @@ import {
   Tooltip
 } from 'recharts';
 
+/**
+ * Safely calls html2canvas by temporarily transforming modern CSS rules (like oklab, oklch, light-dark, color-mix)
+ * into standard compatible colors (like rgb/rgba). html2canvas manually traverses and parses stylesheets,
+ * rules, and computed styles, and crashes with "Attempting to parse an unsupported color function"
+ * when encountering these modern spec formats.
+ * Redefines CSSStyleSheet properties and window.getComputedStyle for the duration of the call.
+ */
+async function safeHtml2Canvas(element: HTMLElement, options: any): Promise<HTMLCanvasElement> {
+  const wrapStyle = (style: CSSStyleDeclaration | null): any => {
+    if (!style) return style;
+    return new Proxy(style, {
+      get(target, prop) {
+        const val = (target as any)[prop];
+        if (typeof val === 'string') {
+          if (val.includes('oklch') || val.includes('oklab') || val.includes('color-mix') || val.includes('light-dark')) {
+            return val
+              .replace(/oklch\([^)]+\)/g, 'rgb(250, 204, 21)')
+              .replace(/oklab\([^)]+\)/g, 'rgb(250, 204, 21)')
+              .replace(/light-dark\(([^,]+),[^)]+\)/g, '$1')
+              .replace(/color-mix\([^)]+\)/g, 'rgb(250, 204, 21)');
+          }
+          return val;
+        }
+        if (typeof val === 'function') {
+          return function(this: any, ...args: any[]) {
+            const result = val.apply(target, args);
+            if (typeof result === 'string' && (
+              result.includes('oklch') || 
+              result.includes('oklab') || 
+              result.includes('color-mix') || 
+              result.includes('light-dark')
+            )) {
+              return result
+                .replace(/oklch\([^)]+\)/g, 'rgb(250, 204, 21)')
+                .replace(/oklab\([^)]+\)/g, 'rgb(250, 204, 21)')
+                .replace(/light-dark\(([^,]+),[^)]+\)/g, '$1')
+                .replace(/color-mix\([^)]+\)/g, 'rgb(250, 204, 21)');
+            }
+            return result;
+          };
+        }
+        return val;
+      }
+    });
+  };
+
+  let proxy: any = null;
+
+  const originalGetComputedStyle = window.getComputedStyle;
+  const originalStyleSheetDescriptor = Object.getOwnPropertyDescriptor(CSSStyleSheet.prototype, 'cssRules');
+  const originalStyleSheetRulesDescriptor = Object.getOwnPropertyDescriptor(CSSStyleSheet.prototype, 'rules');
+  
+  const hasGroupingRule = typeof window !== 'undefined' && 'CSSGroupingRule' in window;
+  const originalGroupingRuleDescriptor = hasGroupingRule
+    ? Object.getOwnPropertyDescriptor((window as any).CSSGroupingRule.prototype, 'cssRules')
+    : null;
+
+  let restoreApplied = false;
+
+  const restore = () => {
+    if (restoreApplied) return;
+    window.getComputedStyle = originalGetComputedStyle;
+    try {
+      if (originalStyleSheetDescriptor) {
+        Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', originalStyleSheetDescriptor);
+      } else {
+        delete (CSSStyleSheet.prototype as any).cssRules;
+      }
+      if (originalStyleSheetRulesDescriptor) {
+        Object.defineProperty(CSSStyleSheet.prototype, 'rules', originalStyleSheetRulesDescriptor);
+      } else {
+        delete (CSSStyleSheet.prototype as any).rules;
+      }
+    } catch (e) {
+      console.warn('Could not restore CSSStyleSheet properties:', e);
+    }
+
+    try {
+      if (hasGroupingRule && originalGroupingRuleDescriptor) {
+        Object.defineProperty((window as any).CSSGroupingRule.prototype, 'cssRules', originalGroupingRuleDescriptor);
+      } else if (hasGroupingRule) {
+        delete ((window as any).CSSGroupingRule.prototype as any).cssRules;
+      }
+    } catch (e) {
+      console.warn('Could not restore CSSGroupingRule properties:', e);
+    }
+    
+    restoreApplied = true;
+  };
+
+  const filterRule = (rule: CSSRule): CSSRule => {
+    if (!rule) return rule;
+    return new Proxy(rule, {
+      get(target, prop) {
+        if (prop === 'cssText') {
+          const text = target.cssText;
+          if (text) {
+            return text
+              .replace(/oklch\([^)]+\)/g, 'rgb(250, 204, 21)')
+              .replace(/oklab\([^)]+\)/g, 'rgb(250, 204, 21)')
+              .replace(/light-dark\(([^,]+),[^)]+\)/g, '$1')
+              .replace(/color-mix\([^)]+\)/g, 'rgb(250, 204, 21)');
+          }
+          return text;
+        }
+        if (prop === 'style' && 'style' in target) {
+          return wrapStyle((target as any).style);
+        }
+        if (prop === 'cssRules' && 'cssRules' in target) {
+          return filterRules((target as any).cssRules);
+        }
+        const val = (target as any)[prop];
+        if (typeof val === 'function') {
+          return val.bind(target);
+        }
+        return val;
+      }
+    });
+  };
+
+  const filterRules = (rules: CSSRuleList | null): any => {
+    if (!rules) return rules;
+    try {
+      const proxiedList: CSSRule[] = [];
+      for (let i = 0; i < rules.length; i++) {
+        const item = rules[i];
+        if (item) {
+          proxiedList.push(filterRule(item));
+        }
+      }
+
+      return new Proxy(proxiedList, {
+        get(target, prop) {
+          if (prop === 'length') {
+            return target.length;
+          }
+          if (prop === 'item') {
+            return (index: number) => target[index] || null;
+          }
+          if (typeof prop === 'string' && !isNaN(Number(prop))) {
+            return target[Number(prop)];
+          }
+          return (target as any)[prop];
+        }
+      });
+    } catch {
+      return rules;
+    }
+  };
+
+  try {
+    window.getComputedStyle = function(this: any, el: Element, pseudo?: string) {
+      const originalStyle = originalGetComputedStyle.call(this, el, pseudo);
+      return wrapStyle(originalStyle);
+    };
+
+    if (originalStyleSheetDescriptor && originalStyleSheetDescriptor.get) {
+      const originalGet = originalStyleSheetDescriptor.get;
+      Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', {
+        get() {
+          try {
+            return filterRules(originalGet.call(this));
+          } catch {
+            return [];
+          }
+        },
+        configurable: true
+      });
+    }
+
+    if (originalStyleSheetRulesDescriptor && originalStyleSheetRulesDescriptor.get) {
+      const originalGet = originalStyleSheetRulesDescriptor.get;
+      Object.defineProperty(CSSStyleSheet.prototype, 'rules', {
+        get() {
+          try {
+            return filterRules(originalGet.call(this));
+          } catch {
+            return [];
+          }
+        },
+        configurable: true
+      });
+    }
+
+    if (hasGroupingRule && originalGroupingRuleDescriptor && originalGroupingRuleDescriptor.get) {
+      const originalGet = originalGroupingRuleDescriptor.get;
+      Object.defineProperty((window as any).CSSGroupingRule.prototype, 'cssRules', {
+        get() {
+          try {
+            return filterRules(originalGet.call(this));
+          } catch {
+            return [];
+          }
+        },
+        configurable: true
+      });
+    }
+
+    const canvas = await html2canvas(element, options);
+    restore();
+    return canvas;
+  } catch (err) {
+    restore();
+    throw err;
+  }
+}
+
+const getDimensionStatus = (name: string, score: number) => {
+  if (score >= 8) {
+    return { text: 'مثالي تشغيلياً', color: 'text-hub-emerald bg-hub-emerald/10 border-hub-emerald/30' };
+  }
+  
+  const isLow = score < 5;
+  const lowerName = name.toLowerCase();
+  
+  if (lowerName.includes('hook') || lowerName.includes('خطاف')) {
+    return isLow 
+      ? { text: 'خطافات ضعيفة وغير جاذبة', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'بحاجة لتجويد صياغة الخطاف', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  if (lowerName.includes('retention') || lowerName.includes('احتفاظ')) {
+    return isLow 
+      ? { text: 'تسريب حرج للاحتفاظ بالجمهور', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'تشتت جزئي في إكمال المقطع', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  if (lowerName.includes('share') || lowerName.includes('مشاركة')) {
+    return isLow 
+      ? { text: 'عجز في محفزات النشر والحفظ', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'ضعف في الحفظ والمشاركة', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  if (lowerName.includes('community') || lowerName.includes('مجتمع')) {
+    return isLow 
+      ? { text: 'خمول وتجاهل للمتابعين والردود', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'تفاعل ببديهيات منخفضة', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  if (lowerName.includes('identity') || lowerName.includes('هوية')) {
+    return isLow 
+      ? { text: 'غياب التموضع والهوية المصقولة', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'تشتت التموضع البصري', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  if (lowerName.includes('consistency') || lowerName.includes('انتظام')) {
+    return isLow 
+      ? { text: 'نشر عشوائي غير منتظم', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'تذبذب وتفاوت معدلات النشر', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  if (lowerName.includes('funnel') || lowerName.includes('ربط')) {
+    return isLow 
+      ? { text: 'غياب كامل لقنوات البيع', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'مسار بيع غير مؤتمت كلياً', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  if (lowerName.includes('sponsorship') || lowerName.includes('رعاية')) {
+    return isLow 
+      ? { text: 'غير مهيأ لصفقات الرعاية', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'جاذبية منخفضة للشركاء', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  if (lowerName.includes('harmony') || lowerName.includes('تناغم')) {
+    return isLow 
+      ? { text: 'تعارض تام مع الخوارزميات', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+      : { text: 'استجابة جزئية لشروط المنصة', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+  }
+  
+  return isLow 
+    ? { text: 'قصور تشغيلي حرج', color: 'text-hub-rose bg-hub-rose/10 border-hub-rose/30' } 
+    : { text: 'أداء غير مستقر نسبياً', color: 'text-hub-gold-light bg-hub-gold/10 border-hub-gold/30' };
+};
+
 interface AuditResultViewProps {
   report: AuditReport;
   savedAudits?: AuditReport[];
@@ -90,16 +356,16 @@ export default function AuditResultView({ report, savedAudits }: AuditResultView
   const generateSimplifiedImage = async () => {
     setGeneratingSimpleCard(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 800));
       const element = document.getElementById('export-simple-card-wrapper');
       if (!element) {
         throw new Error('Simplified image elements are missing in DOM.');
       }
-      const canvas = await html2canvas(element, {
+      const canvas = await safeHtml2Canvas(element, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: '#0A0B0E',
+        backgroundColor: '#0f172a',
         logging: false
       });
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
@@ -165,7 +431,7 @@ export default function AuditResultView({ report, savedAudits }: AuditResultView
       
       for (let i = 0; i < pages.length; i++) {
         const pageEl = pages[i] as HTMLElement;
-        const canvas = await html2canvas(pageEl, opt);
+        const canvas = await safeHtml2Canvas(pageEl, opt);
         const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
         if (i > 0) {
@@ -422,6 +688,7 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
           {/* Action buttons */}
           <div className="flex flex-col sm:flex-row gap-2">
             <button
+              id="share-card-trigger-btn"
               type="button"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowShareModal(true); getShareLink(); generateSimplifiedImage(); }}
               className="flex items-center gap-2 bg-[#5EC2FF]/10 text-[#5EC2FF] border border-[#5EC2FF]/30 hover:bg-[#5EC2FF]/20 px-3.5 py-2 text-xs rounded-lg font-bold transition-all cursor-pointer"
@@ -452,24 +719,16 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
 
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); exportToPDF(); }}
-              disabled={exportingPDF}
-              className={`flex items-center gap-2 bg-gradient-to-r from-hub-gold to-hub-gold-light text-[#0A0B0E] hover:brightness-110 px-3.5 py-2 text-xs rounded-lg font-black transition-all cursor-pointer ${
-                exportingPDF ? 'opacity-50 cursor-not-allowed animate-pulse' : ''
-              }`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.print();
+              }}
+              className="flex items-center gap-2 bg-gradient-to-r from-hub-gold to-hub-gold-light text-[#0A0B0E] hover:brightness-110 px-3.5 py-2 text-xs rounded-lg font-black transition-all cursor-pointer"
               title="تصدير ملف PDF فاخر يحتفظ بالهوية البصرية الداكنة، الرسوم البيانية والجداول"
             >
-              {exportingPDF ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-[#0A0B0E] border-t-transparent rounded-full animate-spin" />
-                  جاري بناء التقرير...
-                </>
-              ) : (
-                <>
-                  <span className="text-[10px] bg-[#0A0B0E]/10 px-1 py-0.5 rounded font-black">PDF</span>
-                  تصدير PDF الفاخر
-                </>
-              )}
+              <span className="text-[10px] bg-[#0A0B0E]/10 px-1 py-0.5 rounded font-black">PDF</span>
+              تصدير PDF الفاخر
             </button>
 
             <button
@@ -706,15 +965,9 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
                 {report.dimensions && report.dimensions.map((dim, i) => {
                   const barPercent = `${dim.score * 10}%`;
                   // Determine score status text and color
-                  let statusText = 'بحاجة لتعديل هيكلي';
-                  let statusColor = 'text-hub-rose';
-                  if (dim.score >= 8) {
-                    statusText = 'مثالي تشغيلياً';
-                    statusColor = 'text-hub-emerald';
-                  } else if (dim.score >= 5) {
-                    statusText = 'ضعف في الحفظ والمشاركة';
-                    statusColor = 'text-hub-gold-light';
-                  }
+                  const statusInfo = getDimensionStatus(dim.name, dim.score);
+                  const statusText = statusInfo.text;
+                  const statusColor = statusInfo.color.split(' ')[0]; // Extract only the text-color class to avoid styling pollution with default bg-black/30
                   
                   return (
                     <div key={i} className="bg-hub-bg/45 border border-hub-border/60 rounded-xl p-4 transition-all hover:border-hub-border">
@@ -1642,111 +1895,121 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
       {/* Hidden using fixed positive coordinates and opacity 0 so html2canvas renders it with precise element widths and font weights */}
       <div 
         id="export-simple-card-wrapper"
-        className="fixed top-0 left-0 pointer-events-none select-none text-white bg-[#0A0B0E] border border-hub-border p-8 rounded-2xl flex flex-col justify-between"
-        style={{ width: '600px', height: '780px', zIndex: -3000, opacity: 0 }}
+        className="fixed pointer-events-none select-none text-white bg-[#0f172a] border border-hub-border p-8 rounded-2xl flex flex-col justify-between"
+        style={{ width: '600px', height: '780px', position: 'fixed', left: '-9999px', top: '-9999px', zIndex: -3000, opacity: 1, backgroundColor: '#0f172a' }}
         dir="rtl"
       >
         <div>
-          {/* Logo Brand Header */}
-          <div className="flex justify-between items-center border-b border-hub-border/50 pb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-hub-accent rounded-lg flex items-center justify-center font-black text-white text-md tracking-wider">
-                H
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] text-hub-gold font-bold block leading-none">THE HUB V1</span>
-                <span className="text-xs font-black text-white block">مجموعة تسريع النمو الخوارزمي</span>
-              </div>
-            </div>
-            <div className="text-left">
-              <span className="text-[9px] text-[#5EC2FF] px-2 py-0.5 rounded border border-[#5EC2FF]/20 bg-[#5EC2FF]/5 font-mono uppercase">
-                Algorithmic Overview
-              </span>
-            </div>
-          </div>
-
-          {/* Client Meta block */}
-          <div className="bg-[#161B22]/60 border border-hub-border/40 rounded-xl p-4 mt-6 grid grid-cols-2 gap-4 text-right">
-            <div>
-              <span className="text-[10px] text-gray-500 font-bold block leading-none">العميل المستهدف:</span>
-              <span className="text-xs font-black text-white mt-1.5 block">{report.inputData.clientName}</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-gray-500 font-bold block leading-none">المنصة والعمق الخوارزمي:</span>
-              <span className="text-xs font-black text-hub-gold-light mt-1.5 block">{formatPlatform(report.inputData.platform)}</span>
-            </div>
-          </div>
-
-          {/* Scores block */}
-          <div className="grid grid-cols-12 gap-4 items-center mt-6">
-            {/* Circular score display */}
-            <div className="col-span-4 bg-[#161B22]/40 border border-hub-border/40 rounded-xl p-4 flex flex-col items-center justify-center h-28">
-              <div className="text-3xl font-black text-white leading-none">{report.hubScore}</div>
-              <div className="text-[9px] text-gray-400 font-bold mt-1 text-center">THE HUB SCORE</div>
-              <span className={`text-[8px] font-black mt-2 px-1.5 py-0.5 rounded ${
-                report.hubScore >= 70 ? 'bg-hub-emerald/10 text-hub-emerald animate-pulse' : report.hubScore >= 45 ? 'bg-hub-gold/10 text-hub-gold-light' : 'bg-hub-rose/10 text-hub-rose'
-              }`}>
-                {report.hubScore >= 70 ? 'صحيح تشغيلياً' : report.hubScore >= 45 ? 'تراجع خوارزمي' : 'نزيف قنوات حاد'}
-              </span>
-            </div>
-
-            {/* Metrics descriptors */}
-            <div className="col-span-8 bg-[#161B22]/40 border border-hub-border/40 rounded-xl p-4 h-28 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-400">درجة موثوقية التقييم:</span>
-                <span className="font-bold text-white">{report.confidenceScore}%</span>
-              </div>
-              <div className="w-full bg-[#0D1117] h-1.5 rounded-full overflow-hidden mt-1">
-                <div className="bg-hub-gold h-full rounded-full" style={{ width: `${report.confidenceScore}%` }} />
-              </div>
-              <p className="text-[9px] text-gray-400 mt-2 leading-relaxed">
-                يعبّر هذا الفحص الفوري عن مدى قابلية الحساب للتوافق التام مع خوارزمية النشر العضوي وتسييل معدلات الوصول الحقيقية.
-              </p>
-            </div>
-          </div>
-
-          {/* Key Bottleneck */}
-          {report.bottlenecks && report.bottlenecks.length > 0 && (
-            <div className="mt-6 space-y-2 text-right">
-              <span className="text-[10px] text-hub-rose font-black uppercase flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-hub-rose rounded-full" />
-                العجز الأبرز مكتشفاً (النزيف الخوارزمي الأساسي):
-              </span>
-              <div className="bg-hub-rose/5 border border-hub-rose/20 rounded-xl p-4">
-                <h4 className="text-xs font-black text-white leading-snug">{report.bottlenecks[0].title}</h4>
-                <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{report.bottlenecks[0].description}</p>
-                <div className="grid grid-cols-2 gap-4 mt-2.5 pt-2 border-t border-hub-border/40 text-[9px] text-gray-450">
-                  <span><strong>الأثر الخوارزمي:</strong> {report.bottlenecks[0].algorithmicImpact}</span>
-                  <span><strong>أثر المبيعات:</strong> {report.bottlenecks[0].commercialImpact}</span>
+          {/* المربع الأول (رأس الكارت) */}
+          <div className="bg-white border border-amber-500/30 rounded-xl p-4 flex flex-col gap-3 shadow-sm">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center font-black text-amber-500 text-sm tracking-wider">
+                  H
                 </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-amber-600 font-bold block leading-none">THE HUB V1</span>
+                  <span className="text-xs font-black text-slate-900 block">مجموعة تسريع النمو الخوارزمي</span>
+                </div>
+              </div>
+              <div className="text-left">
+                <span className="text-[9px] text-slate-800 px-2 py-0.5 rounded border border-slate-200 bg-slate-50 font-mono uppercase font-bold">
+                  Algorithmic Overview
+                </span>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 text-right">
+              <div>
+                <span className="text-[10px] text-slate-500 font-bold block leading-none">العميل المستهدف:</span>
+                <span className="text-xs font-black text-slate-900 mt-1 block">{report.inputData.clientName}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 font-bold block leading-none">المنصة والعمق الخوارزمي:</span>
+                <span className="text-xs font-black text-slate-900 mt-1 block">{formatPlatform(report.inputData.platform)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* المربع الثاني (التقييم وهدر المالي) */}
+          <div className="bg-white border border-amber-500/30 rounded-xl p-4 flex flex-col justify-between shadow-sm mt-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full border-2 border-slate-200 flex items-center justify-center bg-slate-50 shadow-inner">
+                  <div className="text-xl font-black text-slate-900">{report.hubScore}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] text-slate-500 font-bold">THE HUB SCORE</div>
+                  <span className={`text-[9px] font-black mt-1 inline-block px-1.5 py-0.5 rounded ${
+                    report.hubScore >= 70 ? 'bg-emerald-100 text-emerald-800' : report.hubScore >= 45 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {report.hubScore >= 70 ? 'صحيح تشغيلياً' : report.hubScore >= 45 ? 'تراجع خوارزمي' : 'نزيف قنوات حاد'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Confidence Score */}
+              <div className="text-left flex-1 max-w-[200px]">
+                <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
+                  <span>درجة الموثوقية:</span>
+                  <span>{report.confidenceScore}%</span>
+                </div>
+                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-amber-500 h-full rounded-full" style={{ width: `${report.confidenceScore}%` }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Waste text */}
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between bg-rose-50 p-2 rounded-lg border border-rose-100">
+              <span className="text-[10px] text-slate-600 font-bold">حجم الهدر المالي المتوقع:</span>
+              <span className="text-xs font-black text-rose-700 font-mono">3,000$ شهرياً</span>
+            </div>
+          </div>
+
+          {/* المربع الثالث (العجز الأساسي) */}
+          {report.bottlenecks && report.bottlenecks.length > 0 && (
+            <div className="bg-white border border-amber-500/30 rounded-xl p-4 shadow-sm mt-4 text-right">
+              <span className="text-[10px] text-rose-600 font-black uppercase flex items-center gap-1.5 mb-2">
+                <span className="w-1.5 h-1.5 bg-rose-600 rounded-full" />
+                العجز الخوارزمي الأبرز:
+              </span>
+              <h4 className="text-xs font-black text-slate-900 leading-snug">{report.bottlenecks[0].title}</h4>
+              <p className="text-[10px] text-slate-600 mt-1 leading-relaxed">{report.bottlenecks[0].description}</p>
+              
+              <div className="grid grid-cols-2 gap-4 mt-2.5 pt-2 border-t border-slate-100 text-[9px] text-slate-500">
+                <span className="text-slate-600">
+                  <strong className="text-slate-800">الأثر الخوارزمي:</strong> {report.bottlenecks[0].algorithmicImpact}
+                </span>
+                <span className="text-slate-600">
+                  <strong className="text-slate-800">أثر المبيعات:</strong> {report.bottlenecks[0].commercialImpact}
+                </span>
               </div>
             </div>
           )}
 
-          {/* Key Action/Quick win */}
+          {/* المربع الرابع (التوصية الفورية) */}
           {report.quickWins && report.quickWins.length > 0 && (
-            <div className="mt-6 space-y-2 text-right">
-              <span className="text-[10px] text-hub-emerald font-black uppercase flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-hub-emerald rounded-full" />
-                التوصية السريعة الفورية للتنفيذ خلال 30 يوماً:
+            <div className="bg-white border border-amber-500/30 rounded-xl p-4 shadow-sm mt-4 text-right">
+              <span className="text-[10px] text-emerald-600 font-black uppercase flex items-center gap-1.5 mb-2">
+                <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full" />
+                الإجراء السريع أول 30 يوماً:
               </span>
-              <div className="bg-hub-emerald/5 border border-hub-emerald/20 rounded-xl p-4">
-                <h4 className="text-xs font-black text-white leading-snug flex items-center justify-between">
-                  <span>{report.quickWins[0].title}</span>
-                  <span className="text-[8px] bg-hub-emerald/20 text-hub-emerald px-1.5 py-0.5 rounded font-mono">
-                    تأثير: {report.quickWins[0].impactLevel}
-                  </span>
-                </h4>
-                <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{report.quickWins[0].description}</p>
-              </div>
+              <h4 className="text-xs font-black text-slate-900 leading-snug flex items-center justify-between">
+                <span>{report.quickWins[0].title}</span>
+                <span className="text-[8px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-mono font-bold">
+                  تأثير: {report.quickWins[0].impactLevel}
+                </span>
+              </h4>
+              <p className="text-[10px] text-slate-600 mt-1 leading-relaxed">{report.quickWins[0].description}</p>
             </div>
           )}
         </div>
 
         {/* Card Footer brand statement */}
-        <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500 font-mono">
+        <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-slate-400 font-mono">
           <span>THE HUB PLATFORM SHIELD SYSTEM © 2026</span>
-          <span className="text-hub-gold-light font-black tracking-widest leading-none">THE HUB DIGITAL AGENCY</span>
+          <span className="text-amber-500 font-black tracking-widest leading-none">THE HUB DIGITAL AGENCY</span>
         </div>
       </div>
     </div>
