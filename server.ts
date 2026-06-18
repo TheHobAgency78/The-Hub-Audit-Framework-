@@ -46,8 +46,8 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function callGeminiWithFallback(ai: GoogleGenAI, prompt: string): Promise<string> {
   const modelsToTry = [
-    { name: 'gemini-2.5-flash', useRetry: true, maxAttempts: 3 },
-    { name: 'gemini-1.5-flash', useRetry: true, maxAttempts: 3 }
+    { name: 'gemini-3.5-flash', useRetry: true, maxAttempts: 3 },
+    { name: 'gemini-3.1-flash-lite', useRetry: true, maxAttempts: 3 }
   ];
 
   let lastError: any = null;
@@ -72,7 +72,6 @@ async function callGeminiWithFallback(ai: GoogleGenAI, prompt: string): Promise<
         const textResponse = response.text;
         if (textResponse && textResponse.trim()) {
           let cleaned = textResponse.trim();
-          
           if (cleaned.startsWith('```')) {
             cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
           }
@@ -89,46 +88,26 @@ async function callGeminiWithFallback(ai: GoogleGenAI, prompt: string): Promise<
         lastError = err;
         const errMsg = err.message || '';
         const errStr = typeof err === 'string' ? err : JSON.stringify(err);
-        const fullErrorInfoStr = `${errMsg} ${errStr}`.toLowerCase();
-        
         console.error(`[Gemini Engine] Error with model ${modelName} on attempt ${attempt}:`, errMsg || errStr);
 
-        const statusCode = err.status || err.code || err.error?.code || 0;
-        
-        // Identify capacity issues, timeouts, or transient gateway failures (503, 500, 429)
-        const isTransientNetworkError = fullErrorInfoStr.includes('503') || 
-                                        fullErrorInfoStr.includes('500') ||
-                                        fullErrorInfoStr.includes('unavailable') || 
-                                        fullErrorInfoStr.includes('high demand') || 
-                                        fullErrorInfoStr.includes('rate limit') || 
-                                        fullErrorInfoStr.includes('429') ||
-                                        fullErrorInfoStr.includes('overloaded') ||
-                                        fullErrorInfoStr.includes('temporarily') ||
-                                        fullErrorInfoStr.includes('resource exhausted') ||
-                                        fullErrorInfoStr.includes('service unavailable') ||
-                                        statusCode === 503 ||
-                                        statusCode === 429 ||
-                                        statusCode === 500;
-
-        // If the model does not exist (404, 400 Bad Request / invalid model name), we should immediately skip to another fallback rather than spinning
-        const isModelNotFoundError = fullErrorInfoStr.includes('not found') || 
-                                    fullErrorInfoStr.includes('404') || 
-                                    fullErrorInfoStr.includes('invalid model') || 
-                                    statusCode === 404 || 
-                                    statusCode === 400;
-
-        // We want to retry valid models if they experience temporary cargo load issues OR minor token completion bugs (like JSON formatting mismatches),
-        // but we absolutely want to avoid wasting time retrying unrecognized model names that are non-existent.
-        const isRetriable = isTransientNetworkError || (!isModelNotFoundError);
+        const isRetriable = errMsg.includes('503') || 
+                            errMsg.includes('UNAVAILABLE') || 
+                            errMsg.includes('high demand') || 
+                            errMsg.includes('Rate limit') || 
+                            errMsg.includes('429') ||
+                            errMsg.includes('overloaded') ||
+                            errMsg.includes('temporarily') ||
+                            errMsg.includes('Resource exhausted') ||
+                            err.status === 503 ||
+                            err.status === 429;
 
         if (isRetriable && attempt < maxAttempts) {
-          // Robust progressively scaled backoff with lightweight random jitter
-          const jitter = Math.floor(Math.random() * 1000);
-          const waitTime = attempt * 2000 + jitter;
-          console.warn(`[Gemini Engine] Retriable/transient error occurred on model ${modelName}. Retrying in ${waitTime}ms...`);
+          // Robust backoff: 1.5s -> 3s -> 4.5s
+          const waitTime = attempt * 1500;
+          console.warn(`[Gemini Engine] Retriable/transient error detected (${errMsg}). Retrying in ${waitTime}ms...`);
           await delay(waitTime);
         } else {
-          console.warn(`[Gemini Engine] Error not retriable or exhausted attempts for ${modelName}. Moving to next configured step or model...`);
+          console.warn(`[Gemini Engine] Error not retriable or exhausted attempts for ${modelName}. Moving to next configured step...`);
           break; // break the attempt loop, moves to fallback model
         }
       }

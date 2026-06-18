@@ -46,8 +46,33 @@ export default function App() {
     const hasShareParam = window.location.search.includes('share') || window.location.search.includes('reportId');
     
     if (hasShareParam) {
-      setIsViewerMode(true);
-      document.body.classList.add('viewer-mode');
+      // 1. Inject setTimeout Delay to allow React components & state to complete loading stably
+      setTimeout(() => {
+        setIsViewerMode(true);
+        document.body.classList.add('viewer-mode');
+        
+        // 2. Safe UI selector elements check and silent DOM modifications
+        const elementsToHide = [
+          '#interactive-wizard-bot-section',
+          '#manual-fields-toggle-container',
+          '#manual-fields-toggle-btn',
+          '#clear-form-draft-btn',
+          '#share-card-trigger-btn',
+          '#nav-tabs',
+          '#saved_sidebar',
+          '#preset_selector',
+          'label[for="preset_selector"]',
+          '.reports-sidebar',
+          '.wizard-steps-container'
+        ];
+
+        elementsToHide.forEach((selector) => {
+          const el = document.querySelector(selector) as HTMLElement | null;
+          if (el) {
+            el.style.setProperty('display', 'none', 'important');
+          }
+        });
+      }, 400); // Smart delay of 400ms for stable completion guarantee
     }
 
     if (shareId) {

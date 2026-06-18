@@ -67,8 +67,3 @@ body.viewer-mode .reports-sidebar {
   display: none !important;
 }
 
-body.viewer-mode .grid {
-  /* Ensure full-width container on viewer mode */
-  grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
-}
-
