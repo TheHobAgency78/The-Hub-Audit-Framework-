@@ -46,8 +46,9 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function callGeminiWithFallback(ai: GoogleGenAI, prompt: string): Promise<string> {
   const modelsToTry = [
-    { name: 'gemini-3.5-flash', useRetry: true, maxAttempts: 3 },
-    { name: 'gemini-3.1-flash-lite', useRetry: true, maxAttempts: 3 }
+    { name: 'gemini-3.5-flash', useRetry: true, maxAttempts: 2 },
+    { name: 'gemini-3.1-flash-lite', useRetry: true, maxAttempts: 2 },
+    { name: 'gemini-flash-latest', useRetry: true, maxAttempts: 2 }
   ];
 
   let lastError: any = null;
@@ -88,26 +89,34 @@ async function callGeminiWithFallback(ai: GoogleGenAI, prompt: string): Promise<
         lastError = err;
         const errMsg = err.message || '';
         const errStr = typeof err === 'string' ? err : JSON.stringify(err);
-        console.error(`[Gemini Engine] Error with model ${modelName} on attempt ${attempt}:`, errMsg || errStr);
+        console.warn(`[Gemini Engine] Transient challenge with model ${modelName} on attempt ${attempt}:`, errMsg || errStr);
 
-        const isRetriable = errMsg.includes('503') || 
-                            errMsg.includes('UNAVAILABLE') || 
-                            errMsg.includes('high demand') || 
-                            errMsg.includes('Rate limit') || 
-                            errMsg.includes('429') ||
-                            errMsg.includes('overloaded') ||
-                            errMsg.includes('temporarily') ||
-                            errMsg.includes('Resource exhausted') ||
-                            err.status === 503 ||
-                            err.status === 429;
+        const combinedErrorString = `${errMsg} ${errStr} ${err.status || ''} ${err.statusCode || ''}`.toUpperCase();
+        const isOverloaded = combinedErrorString.includes('503') || 
+                             combinedErrorString.includes('UNAVAILABLE') || 
+                             combinedErrorString.includes('HIGH DEMAND') || 
+                             combinedErrorString.includes('OVERLOADED') ||
+                             combinedErrorString.includes('TEMPORARILY') ||
+                             err.status === 503 || err.statusCode === 503;
 
-        if (isRetriable && attempt < maxAttempts) {
-          // Robust backoff: 1.5s -> 3s -> 4.5s
-          const waitTime = attempt * 1500;
-          console.warn(`[Gemini Engine] Retriable/transient error detected (${errMsg}). Retrying in ${waitTime}ms...`);
+        const isRetriable = isOverloaded || 
+                            combinedErrorString.includes('RATE LIMIT') || 
+                            combinedErrorString.includes('429') ||
+                            combinedErrorString.includes('RESOURCE EXHAUSTED') ||
+                            err.status === 429 || err.statusCode === 429;
+
+        // If the model is overloaded or UNAVAILABLE, we immediately transition to the next healthy model
+        // rather than performing slow retries on an already congested model.
+        const canRetryThisModel = isRetriable && !isOverloaded;
+
+        if (canRetryThisModel && attempt < maxAttempts) {
+          // Robust backoff with jitter to reduce congestion: 1s -> 2s + random jitter
+          const waitTime = (attempt * 1000) + Math.floor(Math.random() * 500) + 100;
+          console.warn(`[Gemini Engine] Rate limit/Resource limit transient error. Retrying ${modelName} in ${waitTime}ms...`);
           await delay(waitTime);
         } else {
-          console.warn(`[Gemini Engine] Error not retriable or exhausted attempts for ${modelName}. Moving to next configured step...`);
+          const reason = isOverloaded ? 'model is overloaded/unavailable (503)' : 'unsupported error or max attempts reached';
+          console.warn(`[Gemini Engine] Instantly falling back from ${modelName} to the next model. Reason: ${reason}`);
           break; // break the attempt loop, moves to fallback model
         }
       }
