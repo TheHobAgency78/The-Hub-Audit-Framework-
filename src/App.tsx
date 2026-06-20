@@ -8,7 +8,6 @@ import { ClientDataInput, AuditReport } from './types';
 import ClientForm from './components/ClientForm';
 import AuditResultView from './components/AuditResultView';
 import ComparisonView from './components/ComparisonView';
-import { PRESET_CLIENTS } from './components/presets';
 import { 
   Briefcase, 
   Settings, 
@@ -26,7 +25,13 @@ import {
   BookOpen
 } from 'lucide-react';
 
+// استيراد مكتبة Google AI الرسمية للاتصال المباشر
+import { GoogleGenAI } from '@google/generative-ai';
+
 const SAVED_AUDITS_KEY = 'the_hub_v1_saved_audits';
+
+// تهيئة عميل الذكاء الاصطناعي باستخدام متغير البيئة الجديد
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'create' | 'reports' | 'compare'>('create');
@@ -39,19 +44,17 @@ export default function App() {
   const [sharedError, setSharedError] = useState<string | null>(null);
   const [isViewerMode, setIsViewerMode] = useState<boolean>(false);
 
-  // Check for shared report ID in URL on load
+  // فحص روابط المشاركة عند تحميل الصفحة
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const shareId = params.get('share') || params.get('reportId');
     const hasShareParam = window.location.search.includes('share') || window.location.search.includes('reportId');
     
     if (hasShareParam) {
-      // 1. Inject setTimeout Delay to allow React components & state to complete loading stably
       setTimeout(() => {
         setIsViewerMode(true);
         document.body.classList.add('viewer-mode');
         
-        // 2. Safe UI selector elements check and silent DOM modifications
         const elementsToHide = [
           '#interactive-wizard-bot-section',
           '#manual-fields-toggle-container',
@@ -72,41 +75,37 @@ export default function App() {
             el.style.setProperty('display', 'none', 'important');
           }
         });
-      }, 400); // Smart delay of 400ms for stable completion guarantee
+      }, 400);
     }
 
+    // محاولة قراءة التقرير من الأرشيف المحلي إذا تم تمرير المعرف عبر الرابط
     if (shareId) {
       setSharedLoading(true);
       setErrorMessage(null);
-      fetch(`/api/share/${shareId}`)
-        .then((res) => {
-          if (!res.ok) {
-            throw new Error('التقرير المطلوب غير موجود على خادم THE HUB أو انتهت صلاحية الرابط.');
+      try {
+        const stored = localStorage.getItem(SAVED_AUDITS_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as AuditReport[];
+          const found = parsed.find(a => a.id === shareId);
+          if (found) {
+            setCurrentReport(found);
+            setActiveTab('reports');
+          } else {
+            throw new Error('التقرير المطلوب غير مخزن محلياً في هذا المتصفح.');
           }
-          return res.json();
-        })
-        .then((data) => {
-          setCurrentReport(data);
-          setActiveTab('reports');
-          // Save to local audits if not already present
-          setSavedAudits((prev) => {
-            if (prev.some((a) => a.id === data.id)) return prev;
-            const updated = [data, ...prev];
-            localStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
-            return updated;
-          });
-        })
-        .catch((err) => {
-          console.error('Error fetching shared report:', err);
-          setSharedError(err.message || 'فشل تحميل التقرير المشترك.');
-        })
-        .finally(() => {
-          setSharedLoading(false);
-        });
+        } else {
+          throw new Error('لم يتم العثور على أي تقارير منشأة.');
+        }
+      } catch (err: any) {
+        console.error('Error fetching shared report:', err);
+        setSharedError(err.message || 'فشل تحميل التقرير المشترك.');
+      } finally {
+        setSharedLoading(false);
+      }
     }
   }, []);
 
-  // Rotation index for loading screens simulation logs
+  // نصوص المحاكاة أثناء معالجة الخوارزميات
   const simulationLogs = [
     'جاري فك تشفير مدخلات العميل وربطها بقنوات التسييل والوصول المتاحة...',
     'محاكاة معايير أول 3 ثوانٍ خوارزمياً وتقييم Hook Rate...',
@@ -116,7 +115,7 @@ export default function App() {
     'ترسيم وتنسيق الخدمات الست لوكالة THE HUB لتغطية العجز المكتشف...'
   ];
 
-  // Load Saved Audits on startup
+  // تحميل التقارير المحفوظة عند التشغيل
   useEffect(() => {
     try {
       const stored = localStorage.getItem(SAVED_AUDITS_KEY);
@@ -124,7 +123,7 @@ export default function App() {
         const parsed = JSON.parse(stored) as AuditReport[];
         setSavedAudits(parsed);
         if (parsed.length > 0) {
-          setCurrentReport(parsed[0]); // Select latest by default
+          setCurrentReport(parsed[0]);
         }
       }
     } catch (e) {
@@ -132,7 +131,7 @@ export default function App() {
     }
   }, []);
 
-  // Set rotating simulator logs during loading
+  // تدوير نصوص المحاكاة في شاشة الانتظار
   useEffect(() => {
     let logInterval: any;
     if (loading) {
@@ -146,36 +145,43 @@ export default function App() {
     return () => clearInterval(logInterval);
   }, [loading]);
 
+  // دالة المعالجة والفحص المباشرة مع مكتبة Gemini الاحترافية
   const handleAuditSubmit = async (inputData: ClientDataInput) => {
     setLoading(true);
     setErrorMessage(null);
 
     try {
-      const response = await fetch('/api/audit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(inputData),
+      // استدعاء نموذج جيميناي وإجباره على إرجاع صيغة JSON نقية ومستقرة
+      const model = ai.getGenerativeModel({ 
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: "application/json" }
       });
+      
+      const prompt = `أنت الخبير الاستراتيجي والمستشار الرقمي المتقدم لوكالة "THE HUB". مهمتك هي إجراء فحص وتدقيق خوارزمي صارم وحاد بناءً على البيانات المدخلة للعميل.
+      قم بتحليل المدخلات وأعطني تقريراً تحليلياً شاملاً بصيغة JSON متوافقة تماماً وبأدق التفاصيل مع هيكل كائن المخرجات (AuditReport). لا تضف أي نصوص مقدمة أو مؤخرة، فقط كائن الـ JSON.
+      البيانات المدخلة: ${JSON.stringify(inputData)}`;
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || errorData.error || 'فشلت معالجة الفحص الخوارزمي.');
-      }
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      
+      // تحويل مخرجات الذكاء الاصطناعي إلى كائن برمجى للواجهة
+      const generatedReport = JSON.parse(responseText) as AuditReport;
 
-      const generatedReport = await response.json() as AuditReport;
+      // ضبط المعرفات والتواريخ محلياً لضمان مرونة العرض بدون قاعدة بيانات منفصلة
+      generatedReport.id = generatedReport.id || `audit_${Date.now()}`;
+      generatedReport.createdAt = new Date().toISOString();
+      generatedReport.inputData = inputData;
 
-      // Persist results
+      // حفظ التقرير فورياً في مستودع المتصفح المحلي
       const updatedAudits = [generatedReport, ...savedAudits];
       setSavedAudits(updatedAudits);
       localStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updatedAudits));
       
       setCurrentReport(generatedReport);
-      setActiveTab('reports'); // Switch instantly to preview the generated report!
+      setActiveTab('reports');
     } catch (error: any) {
       console.error('Audit failed:', error);
-      setErrorMessage(error.message || 'حدث خطأ غير متوقع أثناء معالجة بيانات العميل مع نموذج الذكاء الاصطناعي.');
+      setErrorMessage(error.message || 'حدث خطأ غير متوقع أثناء معالجة بيانات العميل مع نموذج الذكاء الاصطناعي المباشر.');
     } finally {
       setLoading(false);
     }
@@ -199,7 +205,6 @@ export default function App() {
       <header className="border-b border-hub-border bg-hub-card/80 backdrop-blur-md sticky top-0 z-50 px-4 py-3 sm:px-6 lg:px-8 no-print">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           
-          {/* Logo element mapping RTL/Arabic */}
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 bg-hub-accent rounded-xl flex items-center justify-center font-black text-white text-lg tracking-wider select-none shadow-lg shadow-hub-accent/10">
               H
@@ -213,15 +218,12 @@ export default function App() {
             </div>
           </div>
 
-          {/* Navigation Controls */}
           {!isViewerMode && (
             <nav className="flex items-center gap-1" id="nav-tabs">
               <button
                 onClick={() => setActiveTab('create')}
                 className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
-                  activeTab === 'create'
-                    ? 'bg-hub-accent text-white shadow'
-                    : 'text-gray-400 hover:text-white'
+                  activeTab === 'create' ? 'bg-hub-accent text-white shadow' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 محلل فحص جديد V1
@@ -229,9 +231,7 @@ export default function App() {
               <button
                 onClick={() => setActiveTab('reports')}
                 className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
-                  activeTab === 'reports'
-                    ? 'bg-hub-accent text-white shadow'
-                    : 'text-gray-400 hover:text-white'
+                  activeTab === 'reports' ? 'bg-hub-accent text-white shadow' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 التقارير المولدة ({savedAudits.length})
@@ -239,9 +239,7 @@ export default function App() {
               <button
                 onClick={() => setActiveTab('compare')}
                 className={`px-4 py-2 rounded-lg text-xs font-semibold pb-2 pt-2 transition-all cursor-pointer ${
-                  activeTab === 'compare'
-                    ? 'bg-hub-accent text-white shadow'
-                    : 'text-gray-400 hover:text-white'
+                  activeTab === 'compare' ? 'bg-hub-accent text-white shadow' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 لوحة مقارنة الحسابات
@@ -249,7 +247,6 @@ export default function App() {
             </nav>
           )}
 
-          {/* Status Badge */}
           <div className="hidden md:flex items-center gap-2 text-xs bg-hub-bg border border-hub-border/60 rounded-full py-1 px-3">
             <Activity className="w-3.5 h-3.5 text-hub-emerald animate-pulse" />
             <span className="text-gray-400 text-[10px] font-bold">نسخة الإطار V1 تشغيلية</span>
@@ -258,7 +255,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* 2. SUB HEADER BANNER AREA (Except Print) */}
+      {/* 2. SUB HEADER BANNER AREA */}
       <div className="bg-gradient-to-b from-hub-card to-hub-bg py-8 px-4 sm:px-6 lg:px-8 border-b border-hub-border/50 no-print">
         <div className="max-w-4xl mx-auto text-center space-y-3">
           <span className="text-[10px] bg-hub-gold/10 text-hub-gold-light font-black tracking-widest px-3 py-1 rounded-full uppercase border border-hub-gold/20 select-none">
@@ -276,22 +273,20 @@ export default function App() {
       {/* 3. MAIN WORKPLACE LAYOUT */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 relative">
         
-        {/* API key Error callout */}
         {errorMessage && (
           <div className="mb-6 p-4 bg-hub-rose/10 border border-hub-rose/30 rounded-xl text-xs text-hub-rose flex items-start gap-3 relative overflow-hidden animate-shake" id="api_error_banner">
             <div className="absolute top-0 right-0 w-1 h-full bg-hub-rose" />
             <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <h4 className="font-bold">فشل إكمال الفحص الرقمي</h4>
+              <h4 className="font-bold">فشل إكمال الفحص الرقمي والمباشر</h4>
               <p className="text-gray-400 leading-relaxed">{errorMessage}</p>
               <div className="pt-2 text-[10px] text-gray-500">
-                يرجى التأكد من إدخال مفتاح <strong>GEMINI_API_KEY</strong> في لوحة <strong>Settings &gt; Secrets</strong> في واجهة AI Studio وتحديث الصفحة.
+                يرجى التأكد من إضافة مفتاح <strong>VITE_GEMINI_API_KEY</strong> بشكل سليم في لوحة تحكم Netlify وتحديث إعدادات الموقع وتنشيط النشر.
               </div>
             </div>
           </div>
         )}
 
-        {/* SHARED REPORT LOADING STATE */}
         {sharedLoading && (
           <div className="fixed inset-0 z-50 bg-[#0A0B0E] flex flex-col items-center justify-center p-6 backdrop-blur-md" id="shared_loading_overlay">
             <div className="max-w-md w-full text-center space-y-6">
@@ -310,7 +305,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Shared Link Loading Error */}
         {sharedError && (
           <div className="mb-6 p-4 bg-hub-rose/10 border border-hub-rose/30 rounded-xl text-xs text-hub-rose flex items-start gap-3 relative overflow-hidden animate-shake" id="shared_error_banner">
             <div className="absolute top-0 right-0 w-1 h-full bg-hub-rose" />
@@ -329,12 +323,10 @@ export default function App() {
           </div>
         )}
 
-        {/* LOADING ANIMATED SCREEN SIMULATOR */}
         {loading && (
           <div className="fixed inset-0 z-50 bg-hub-bg/95 flex flex-col items-center justify-center p-6 backdrop-blur-sm" id="loading_overlay">
             <div className="max-w-md w-full text-center space-y-6">
               
-              {/* Dynamic spinning core widget */}
               <div className="relative w-20 h-20 mx-auto">
                 <div className="absolute inset-0 rounded-full border-4 border-hub-accent/10" />
                 <div className="absolute inset-0 rounded-full border-4 border-hub-accent border-t-transparent animate-spin" />
@@ -343,32 +335,27 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Status feedback log */}
               <div className="space-y-2">
-                <h3 className="text-sm font-black text-white">جاري تحليل وفحص الحساب...</h3>
+                <h3 className="text-sm font-black text-white">جاري تحليل وفحص الحساب خوارزمياً ومباشرة...</h3>
                 <p className="text-xs text-gray-400 animate-pulse font-mono max-w-xs mx-auto min-h-[32px] leading-relaxed">
                   {loadingLogs}
                 </p>
               </div>
 
-              {/* Informational advice */}
               <div className="p-3 bg-hub-card border border-hub-border rounded-xl text-[10px] text-gray-500 text-right leading-relaxed">
                 <span className="font-bold text-gray-300 block mb-1">معلومة خوارزمية:</span>
-                نقوم بمطابقة أرقامك المدخلة مع محركات تيك توك وإنستغرام ريلز للتدفق الاستنتاجي. يتخذ النموذج قرارات حاسمة بناء على إطار THE HUB V1.
+                الموقع يعمل الآن بنظام المعالجة اللامركزية المباشرة (Client-Side) عبر خوادم Google AI الفائقة دون وسائط خارجية لتأمين أعلى مستويات السرعة والاستقرار.
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB 1: CREATE AUDIT */}
         {activeTab === 'create' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start" id="create_tab_view">
-            {/* Form component */}
             <div className="col-span-1 lg:col-span-9">
               <ClientForm onSubmit={handleAuditSubmit} isLoading={loading} />
             </div>
 
-            {/* Right sidebar showing saved client list */}
             <div className="col-span-1 lg:col-span-3 space-y-4 no-print" id="saved_sidebar">
               <div className="bg-hub-card border border-hub-border rounded-xl p-4">
                 <h3 className="text-xs font-black text-white flex items-center gap-1.5 mb-3 pb-2 border-b border-hub-border">
@@ -411,7 +398,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Strategic Agency guidelines side widget */}
               <div className="bg-hub-card border border-hub-border rounded-xl p-4 space-y-3">
                 <h4 className="text-xs font-black text-white flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4 text-hub-accent" />
@@ -425,13 +411,11 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: AUDIT REPORTS VIEW */}
         {activeTab === 'reports' && (
           <div id="reports_tab_view">
             {currentReport ? (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
-                {/* Reports visual navigation sidebar */}
                 {!isViewerMode && (
                   <div className="col-span-1 lg:col-span-3 bg-hub-card border border-hub-border rounded-xl p-4 no-print reports-sidebar">
                     <h3 className="text-xs font-black text-white pb-2 mb-3 border-b border-hub-border">اختر التقرير لمعاينته:</h3>
@@ -467,7 +451,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Main analytical result presentation representation */}
                 <div className={isViewerMode ? "col-span-12 w-full" : "col-span-1 lg:col-span-9"}>
                   <AuditResultView report={currentReport} savedAudits={savedAudits} />
                 </div>
@@ -492,7 +475,6 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: ACCOUNT COMPARISON */}
         {activeTab === 'compare' && (
           <div id="compare_tab_view">
             <ComparisonView savedAudits={savedAudits} />
