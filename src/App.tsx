@@ -46,10 +46,12 @@ export default function App() {
     const hasShareParam = window.location.search.includes('share') || window.location.search.includes('reportId');
     
     if (hasShareParam) {
+      // 1. Inject setTimeout Delay to allow React components & state to complete loading stably
       setTimeout(() => {
         setIsViewerMode(true);
         document.body.classList.add('viewer-mode');
         
+        // 2. Safe UI selector elements check and silent DOM modifications
         const elementsToHide = [
           '#interactive-wizard-bot-section',
           '#manual-fields-toggle-container',
@@ -70,7 +72,7 @@ export default function App() {
             el.style.setProperty('display', 'none', 'important');
           }
         });
-      }, 400);
+      }, 400); // Smart delay of 400ms for stable completion guarantee
     }
 
     if (shareId) {
@@ -86,6 +88,7 @@ export default function App() {
         .then((data) => {
           setCurrentReport(data);
           setActiveTab('reports');
+          // Save to local audits if not already present
           setSavedAudits((prev) => {
             if (prev.some((a) => a.id === data.id)) return prev;
             const updated = [data, ...prev];
@@ -103,6 +106,7 @@ export default function App() {
     }
   }, []);
 
+  // Rotation index for loading screens simulation logs
   const simulationLogs = [
     'جاري فك تشفير مدخلات العميل وربطها بقنوات التسييل والوصول المتاحة...',
     'محاكاة معايير أول 3 ثوانٍ خوارزمياً وتقييم Hook Rate...',
@@ -120,7 +124,7 @@ export default function App() {
         const parsed = JSON.parse(stored) as AuditReport[];
         setSavedAudits(parsed);
         if (parsed.length > 0) {
-          setCurrentReport(parsed[0]);
+          setCurrentReport(parsed[0]); // Select latest by default
         }
       }
     } catch (e) {
@@ -147,51 +151,28 @@ export default function App() {
     setErrorMessage(null);
 
     try {
-      // تم دمج مفتاح الـ API الخاص بك هنا مباشرة وبنجاح
-      const apiKey = "AIzaSyBh_jdoPUin7C_wIdoBBZ6ibg3ON15sCPM";
-
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch('/api/audit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `أنت خبير تدقيق نمو رقمي ومحلل خوارزميات محترف في وكالة "THE HUB". 
-              قم بتحليل بيانات العميل التالية المدخلة من قبل مستخدم المنصة، وقم بإصدار تقرير فحص كامل وحاد خوارزمياً.
-              يجب أن تكون الاستجابة حصراً وبشكل كامل عبارة عن كود JSON صالح ونظيف ومطابق تماماً لواجهة (AuditReport) المستخدمة في المشروع البرمجي، ولا تضف أي نصوص مقدمة أو مؤخرة خارج كود الـ JSON.
-
-              بيانات مدخلات العميل لتحليلها:
-              ${JSON.stringify(inputData)}`
-            }]
-          }],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        }),
+        body: JSON.stringify(inputData),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'فشلت معالجة الفحص الخوارزمي.');
+        throw new Error(errorData.details || errorData.error || 'فشلت معالجة الفحص الخوارزمي.');
       }
 
-      const resData = await response.json();
-      const rawJsonText = resData.candidates[0].content.parts[0].text;
-      const generatedReport = JSON.parse(rawJsonText) as AuditReport;
+      const generatedReport = await response.json() as AuditReport;
 
-      if (!generatedReport.id) {
-        generatedReport.id = 'audit_' + Math.random().toString(36).substr(2, 9);
-      }
-      generatedReport.inputData = inputData;
-
+      // Persist results
       const updatedAudits = [generatedReport, ...savedAudits];
       setSavedAudits(updatedAudits);
       localStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updatedAudits));
       
       setCurrentReport(generatedReport);
-      setActiveTab('reports');
+      setActiveTab('reports'); // Switch instantly to preview the generated report!
     } catch (error: any) {
       console.error('Audit failed:', error);
       setErrorMessage(error.message || 'حدث خطأ غير متوقع أثناء معالجة بيانات العميل مع نموذج الذكاء الاصطناعي.');
@@ -211,13 +192,14 @@ export default function App() {
     }
   };
 
-return (
+  return (
     <div className="min-h-screen bg-hub-bg text-gray-100 flex flex-col font-sans selection:bg-hub-accent selection:text-white" id="main_app_wrapper">
       
       {/* 1. TOP HEADER BRAND BAR */}
       <header className="border-b border-hub-border bg-hub-card/80 backdrop-blur-md sticky top-0 z-50 px-4 py-3 sm:px-6 lg:px-8 no-print">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           
+          {/* Logo element mapping RTL/Arabic */}
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 bg-hub-accent rounded-xl flex items-center justify-center font-black text-white text-lg tracking-wider select-none shadow-lg shadow-hub-accent/10">
               H
@@ -231,6 +213,7 @@ return (
             </div>
           </div>
 
+          {/* Navigation Controls */}
           {!isViewerMode && (
             <nav className="flex items-center gap-1" id="nav-tabs">
               <button
@@ -266,6 +249,7 @@ return (
             </nav>
           )}
 
+          {/* Status Badge */}
           <div className="hidden md:flex items-center gap-2 text-xs bg-hub-bg border border-hub-border/60 rounded-full py-1 px-3">
             <Activity className="w-3.5 h-3.5 text-hub-emerald animate-pulse" />
             <span className="text-gray-400 text-[10px] font-bold">نسخة الإطار V1 تشغيلية</span>
@@ -274,7 +258,7 @@ return (
         </div>
       </header>
 
-      {/* 2. SUB HEADER BANNER AREA */}
+      {/* 2. SUB HEADER BANNER AREA (Except Print) */}
       <div className="bg-gradient-to-b from-hub-card to-hub-bg py-8 px-4 sm:px-6 lg:px-8 border-b border-hub-border/50 no-print">
         <div className="max-w-4xl mx-auto text-center space-y-3">
           <span className="text-[10px] bg-hub-gold/10 text-hub-gold-light font-black tracking-widest px-3 py-1 rounded-full uppercase border border-hub-gold/20 select-none">
@@ -292,6 +276,7 @@ return (
       {/* 3. MAIN WORKPLACE LAYOUT */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 relative">
         
+        {/* API key Error callout */}
         {errorMessage && (
           <div className="mb-6 p-4 bg-hub-rose/10 border border-hub-rose/30 rounded-xl text-xs text-hub-rose flex items-start gap-3 relative overflow-hidden animate-shake" id="api_error_banner">
             <div className="absolute top-0 right-0 w-1 h-full bg-hub-rose" />
@@ -299,10 +284,14 @@ return (
             <div className="space-y-1">
               <h4 className="font-bold">فشل إكمال الفحص الرقمي</h4>
               <p className="text-gray-400 leading-relaxed">{errorMessage}</p>
+              <div className="pt-2 text-[10px] text-gray-500">
+                يرجى التأكد من إدخال مفتاح <strong>GEMINI_API_KEY</strong> في لوحة <strong>Settings &gt; Secrets</strong> في واجهة AI Studio وتحديث الصفحة.
+              </div>
             </div>
           </div>
         )}
 
+        {/* SHARED REPORT LOADING STATE */}
         {sharedLoading && (
           <div className="fixed inset-0 z-50 bg-[#0A0B0E] flex flex-col items-center justify-center p-6 backdrop-blur-md" id="shared_loading_overlay">
             <div className="max-w-md w-full text-center space-y-6">
@@ -321,6 +310,7 @@ return (
           </div>
         )}
 
+        {/* Shared Link Loading Error */}
         {sharedError && (
           <div className="mb-6 p-4 bg-hub-rose/10 border border-hub-rose/30 rounded-xl text-xs text-hub-rose flex items-start gap-3 relative overflow-hidden animate-shake" id="shared_error_banner">
             <div className="absolute top-0 right-0 w-1 h-full bg-hub-rose" />
@@ -339,9 +329,12 @@ return (
           </div>
         )}
 
+        {/* LOADING ANIMATED SCREEN SIMULATOR */}
         {loading && (
           <div className="fixed inset-0 z-50 bg-hub-bg/95 flex flex-col items-center justify-center p-6 backdrop-blur-sm" id="loading_overlay">
             <div className="max-w-md w-full text-center space-y-6">
+              
+              {/* Dynamic spinning core widget */}
               <div className="relative w-20 h-20 mx-auto">
                 <div className="absolute inset-0 rounded-full border-4 border-hub-accent/10" />
                 <div className="absolute inset-0 rounded-full border-4 border-hub-accent border-t-transparent animate-spin" />
@@ -349,11 +342,19 @@ return (
                   <Activity className="w-6 h-6 text-hub-gold-light animate-pulse" />
                 </div>
               </div>
+
+              {/* Status feedback log */}
               <div className="space-y-2">
                 <h3 className="text-sm font-black text-white">جاري تحليل وفحص الحساب...</h3>
                 <p className="text-xs text-gray-400 animate-pulse font-mono max-w-xs mx-auto min-h-[32px] leading-relaxed">
                   {loadingLogs}
                 </p>
+              </div>
+
+              {/* Informational advice */}
+              <div className="p-3 bg-hub-card border border-hub-border rounded-xl text-[10px] text-gray-500 text-right leading-relaxed">
+                <span className="font-bold text-gray-300 block mb-1">معلومة خوارزمية:</span>
+                نقوم بمطابقة أرقامك المدخلة مع محركات تيك توك وإنستغرام ريلز للتدفق الاستنتاجي. يتخذ النموذج قرارات حاسمة بناء على إطار THE HUB V1.
               </div>
             </div>
           </div>
@@ -362,10 +363,12 @@ return (
         {/* TAB 1: CREATE AUDIT */}
         {activeTab === 'create' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start" id="create_tab_view">
+            {/* Form component */}
             <div className="col-span-1 lg:col-span-9">
               <ClientForm onSubmit={handleAuditSubmit} isLoading={loading} />
             </div>
 
+            {/* Right sidebar showing saved client list */}
             <div className="col-span-1 lg:col-span-3 space-y-4 no-print" id="saved_sidebar">
               <div className="bg-hub-card border border-hub-border rounded-xl p-4">
                 <h3 className="text-xs font-black text-white flex items-center gap-1.5 mb-3 pb-2 border-b border-hub-border">
@@ -390,13 +393,15 @@ return (
                         className="p-2.5 rounded-lg bg-hub-bg hover:bg-black/35 border border-hub-border hover:border-hub-accent/40 transition-all cursor-pointer flex items-center justify-between group"
                       >
                         <div className="min-w-0 flex-1 pl-2 text-right">
-                          <span className="text-[11px] font-bold text-white block truncate">{audit.inputData?.clientName || 'عميل مجهول'}</span>
-                          <span className="text-[9px] text-gray-400 block truncate">{audit.inputData?.niche || 'تصنيف عام'}</span>
+                          <span className="text-[11px] font-bold text-white block truncate">{audit.inputData.clientName}</span>
+                          <span className="text-[9px] text-gray-400 block truncate">{audit.inputData.niche}</span>
                           <span className="text-[9px] text-hub-accent font-black block mt-0.5">HUB SCORE: {audit.hubScore}</span>
                         </div>
+                        
                         <button
                           onClick={(e) => deleteAudit(audit.id, e)}
                           className="p-1 px-2 rounded hover:bg-hub-rose/10 text-gray-600 hover:text-hub-rose transition-all cursor-pointer"
+                          title="حذف من الأرشيف"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -406,6 +411,7 @@ return (
                 )}
               </div>
 
+              {/* Strategic Agency guidelines side widget */}
               <div className="bg-hub-card border border-hub-border rounded-xl p-4 space-y-3">
                 <h4 className="text-xs font-black text-white flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4 text-hub-accent" />
@@ -424,6 +430,8 @@ return (
           <div id="reports_tab_view">
             {currentReport ? (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* Reports visual navigation sidebar */}
                 {!isViewerMode && (
                   <div className="col-span-1 lg:col-span-3 bg-hub-card border border-hub-border rounded-xl p-4 no-print reports-sidebar">
                     <h3 className="text-xs font-black text-white pb-2 mb-3 border-b border-hub-border">اختر التقرير لمعاينته:</h3>
@@ -441,7 +449,7 @@ return (
                                 : 'text-gray-400 hover:bg-hub-bg/60 border border-transparent'
                             }`}
                           >
-                            <span className="truncate flex-1 pl-2">{audit.inputData?.clientName || 'عميل مجهول'}</span>
+                            <span className="truncate flex-1 pl-2">{audit.inputData.clientName}</span>
                             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-black/30 text-hub-gold-light">{audit.hubScore}</span>
                           </button>
                         ))}
@@ -459,6 +467,7 @@ return (
                   </div>
                 )}
 
+                {/* Main analytical result presentation representation */}
                 <div className={isViewerMode ? "col-span-12 w-full" : "col-span-1 lg:col-span-9"}>
                   <AuditResultView report={currentReport} savedAudits={savedAudits} />
                 </div>
@@ -504,4 +513,4 @@ return (
 
     </div>
   );
-              
+}
