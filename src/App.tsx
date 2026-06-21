@@ -504,7 +504,7 @@ export default function App() {
       {/* 4. FOOTER AREA */}
       <footer className="border-t border-hub-border bg-hub-card py-6 mt-12 text-center text-xs text-gray-500 no-print">
         <div className="max-w-7xl mx-auto px-4 space-y-2">
-          <p className="font-bold">  قام بتصميم هذا النموذج اصيل ابراهيم الحبيشي مستند الفحص الخوارزمي والتجاري المتقدم — وكالة THE HUB © 2026</p>
+          <p className="font-bold">مستند الفحص الخوارزمي والتجاري المتقدم — وكالة THE HUB © 2026</p>
           <p className="text-[10px] text-gray-600 max-w-lg mx-auto leading-relaxed">
             تخضع منصة التدقيق هذه للسرية التامة للوكالة الحاضنة. تم تصنيف وتحليل مصلحة محركات النشر بناء على براءات خوارزميات TikTok, Meta, YouTube الحديثة لعام 2026.
           </p>
