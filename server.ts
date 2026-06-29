@@ -351,6 +351,104 @@ app.post('/api/audit', async (req, res) => {
   }
 });
 
+// File path to store latest received n8n webhook payload
+const N8N_PAYLOAD_FILE = path.join(process.cwd(), 'latest_n8n_payload.json');
+
+// POST Endpoint for n8n Webhook
+app.post('/api/webhook/n8n', (req, res) => {
+  try {
+    const body = req.body;
+    if (!body || typeof body !== 'object') {
+      return res.status(400).json({ error: 'Payload must be a JSON object' });
+    }
+
+    // Helper to extract value by matching keys/synonyms
+    const getVal = (synonyms: string[]): string => {
+      for (const syn of synonyms) {
+        if (body[syn] !== undefined && body[syn] !== null) {
+          return String(body[syn]);
+        }
+        // Case-insensitive / underscore match
+        const lowerSyn = syn.toLowerCase();
+        for (const key of Object.keys(body)) {
+          const lowerKey = key.toLowerCase();
+          if (
+            lowerKey === lowerSyn ||
+            lowerKey === lowerSyn.replace(/_/g, '') ||
+            lowerKey.replace(/_/g, '') === lowerSyn
+          ) {
+            return String(body[key]);
+          }
+        }
+      }
+      return '';
+    };
+
+    // Extracting platform and normalizing it to known keys
+    const rawPlatform = getVal(['platform', 'المنصة', 'المنصة المستهدفة', 'target_platform', 'targetPlatform', 'المنصه']).toLowerCase();
+    let platform: 'instagram' | 'tiktok' | 'youtube_shorts' | 'x' | 'all' = 'instagram';
+    if (rawPlatform.includes('tiktok') || rawPlatform.includes('تيك') || rawPlatform.includes('تك')) {
+      platform = 'tiktok';
+    } else if (rawPlatform.includes('shorts') || rawPlatform.includes('شورتس') || rawPlatform.includes('يوتيوب') || rawPlatform.includes('youtube')) {
+      platform = 'youtube_shorts';
+    } else if (rawPlatform.includes('x') || rawPlatform.includes('twitter') || rawPlatform.includes('تويتر') || rawPlatform.includes('إكس') || rawPlatform.includes('اكيس')) {
+      platform = 'x';
+    } else if (rawPlatform.includes('all') || rawPlatform.includes('كل') || rawPlatform.includes('الجميع')) {
+      platform = 'all';
+    } else if (rawPlatform.includes('insta') || rawPlatform.includes('انستا') || rawPlatform.includes('انستغرام') || rawPlatform.includes('ريلز')) {
+      platform = 'instagram';
+    }
+
+    const mappedData = {
+      id: `n8n-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      clientName: getVal(['clientName', 'client_name', 'client', 'اسم العميل', 'الاسم', 'name', 'اسم_العميل']),
+      niche: getVal(['niche', 'activity', 'النشاط', 'المجال', 'التخصص', 'القطاع', 'نوع النشاط']),
+      platform,
+      followersCount: getVal(['followersCount', 'followers_count', 'followers', 'عدد المتابعين', 'المتابعين', 'متابعين']),
+      activeCommunitySize: getVal(['activeCommunitySize', 'active_community_size', 'community_size', 'حجم المجتمع', 'نشاط المجتمع', 'الجمهور', 'التفاعل']),
+      first3sRetention: getVal(['first3sRetention', 'first_3s_retention', 'hook_rate', 'hookRate', 'first3s', 'نسبة الاحتفاظ', 'الاحتفاظ أول 3 ثواني', 'الاحتفاظ', 'هوك']),
+      watchTimeCompletion: getVal(['watchTimeCompletion', 'watch_time_completion', 'completion_rate', 'completionRate', 'نسبة إكمال الفيديو', 'إكمال الفيديو', 'معدل المشاهدة', 'اكمال_الفيديو']),
+      averageLikes: getVal(['averageLikes', 'average_likes', 'likes', 'متوسط الإعجابات', 'الإعجابات', 'اللايكات']),
+      averageComments: getVal(['averageComments', 'average_comments', 'comments', 'متوسط التعليقات', 'التعليقات', 'الكومنتات']),
+      averageShares: getVal(['averageShares', 'average_shares', 'shares', 'متوسط المشاركات', 'المشاركات', 'الشير']),
+      averageSaves: getVal(['averageSaves', 'average_saves', 'saves', 'متوسط الحفظ', 'الحفظ', 'السيف']),
+      contentHooksExample: getVal(['contentHooksExample', 'content_hooks_example', 'hooks', 'خطافات المحتوى', 'مثال خطاف', 'الخطاف']),
+      contentCaptionStyle: getVal(['contentCaptionStyle', 'content_caption_style', 'caption_style', 'أسلوب الوصف', 'الوصف', 'الكابشن']),
+      postingFrequency: getVal(['postingFrequency', 'posting_frequency', 'frequency', 'معدل النشر', 'النشر', 'التكرار']),
+      communityInteraction: getVal(['communityInteraction', 'community_interaction', 'interaction', 'التفاعل مع المجتمع', 'تفاعل المجتمع', 'الردود']),
+      customNotes: getVal(['customNotes', 'custom_notes', 'notes', 'ملاحظات', 'ملاحظات إضافية', 'الملاحظات'])
+    };
+
+    // Save to file
+    fs.writeFileSync(N8N_PAYLOAD_FILE, JSON.stringify(mappedData, null, 2), 'utf8');
+    console.log(`[n8n Webhook] Successfully received and mapped payload for client: ${mappedData.clientName}`);
+    
+    return res.json({ 
+      success: true, 
+      message: 'تم استقبال البيانات بنجاح ومطابقتها مع إطار THE HUB V1', 
+      data: mappedData 
+    });
+  } catch (err: any) {
+    console.error('[n8n Webhook] Error processing webhook:', err);
+    return res.status(500).json({ error: 'Failed to process webhook payload', details: err.message });
+  }
+});
+
+// GET Endpoint to retrieve the latest payload
+app.get('/api/webhook/n8n/latest', (req, res) => {
+  try {
+    if (fs.existsSync(N8N_PAYLOAD_FILE)) {
+      const data = fs.readFileSync(N8N_PAYLOAD_FILE, 'utf8');
+      return res.json(JSON.parse(data || '{}'));
+    }
+    return res.json(null);
+  } catch (err: any) {
+    console.error('[n8n Webhook] Error reading latest payload:', err);
+    return res.status(500).json({ error: 'Failed to read latest payload' });
+  }
+});
+
 // Path to store shared reports
 const SHARED_REPORTS_FILE = path.join(process.cwd(), 'shared_reports.json');
 

@@ -120,6 +120,34 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
   const [showManualFields, setShowManualFields] = useState<boolean>(false);
 
+  // n8n Webhook state and polling logic
+  const [latestN8n, setLatestN8n] = useState<any>(null);
+  const [hasNewN8n, setHasNewN8n] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkN8n = async () => {
+      try {
+        const res = await fetch('/api/webhook/n8n/latest');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.id) {
+            setLatestN8n(data);
+            const lastSeenId = localStorage.getItem('last_seen_n8n_id');
+            if (lastSeenId !== data.id) {
+              setHasNewN8n(true);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch latest n8n payload:', e);
+      }
+    };
+
+    checkN8n();
+    const interval = setInterval(checkN8n, 7000);
+    return () => clearInterval(interval);
+  }, []);
+
   const livePredictive = calculateLivePredictiveScore(formData);
 
   // Define steps for our Interactive Wizard Bot
@@ -344,6 +372,67 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
       {/* Subtle styling accent grids */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-hub-accent/5 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-32 h-32 bg-hub-gold/5 rounded-full blur-2xl pointer-events-none" />
+
+      {/* 🤖 n8n webhook auto-injector alert */}
+      {hasNewN8n && latestN8n && (
+        <div className="mb-6 p-4 bg-hub-accent/10 border border-hub-accent rounded-xl text-xs text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden animate-pulse">
+          <div className="absolute top-0 right-0 w-1 bg-hub-accent h-full" />
+          <div className="flex items-start gap-3">
+            <Bot className="w-5 h-5 text-hub-gold-light mt-0.5 flex-shrink-0 animate-bounce" />
+            <div className="space-y-1 text-right">
+              <h4 className="font-extrabold text-hub-gold-light flex items-center gap-1.5">
+                مزامنة خوارزمية: تم استقبال بيانات جديدة من n8n! 🤖
+              </h4>
+              <p className="text-gray-300 leading-relaxed">
+                العميل: <strong className="text-white">{latestN8n.clientName || 'بدون اسم'}</strong> | 
+                النشاط: <strong className="text-white">{latestN8n.niche || 'بدون تخصص'}</strong> | 
+                المنصة: <strong className="text-white">{latestN8n.platform || 'instagram'}</strong>
+              </p>
+              <span className="text-[9px] text-gray-500 block">وصلت عبر n8n Webhook</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mr-auto sm:mr-0 self-end sm:self-center">
+            <button
+              type="button"
+              onClick={() => {
+                setFormData({
+                  clientName: latestN8n.clientName || '',
+                  niche: latestN8n.niche || '',
+                  platform: latestN8n.platform || 'instagram',
+                  followersCount: latestN8n.followersCount || '',
+                  activeCommunitySize: latestN8n.activeCommunitySize || '',
+                  first3sRetention: latestN8n.first3sRetention || '',
+                  watchTimeCompletion: latestN8n.watchTimeCompletion || '',
+                  averageLikes: latestN8n.averageLikes || '',
+                  averageComments: latestN8n.averageComments || '',
+                  averageShares: latestN8n.averageShares || '',
+                  averageSaves: latestN8n.averageSaves || '',
+                  contentHooksExample: latestN8n.contentHooksExample || '',
+                  contentCaptionStyle: latestN8n.contentCaptionStyle || '',
+                  postingFrequency: latestN8n.postingFrequency || '',
+                  communityInteraction: latestN8n.communityInteraction || '',
+                  customNotes: latestN8n.customNotes || ''
+                });
+                localStorage.setItem('last_seen_n8n_id', latestN8n.id);
+                setHasNewN8n(false);
+              }}
+              className="px-3.5 py-2 bg-hub-accent hover:bg-opacity-90 text-white font-black rounded-lg transition-all text-xs cursor-pointer shadow-lg shadow-hub-accent/25"
+            >
+              حقن وتعبئة البيانات تلقائياً
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem('last_seen_n8n_id', latestN8n.id);
+                setHasNewN8n(false);
+              }}
+              className="px-2.5 py-2 bg-[#161B22] border border-hub-border hover:bg-black/40 text-gray-400 hover:text-white rounded-lg text-xs cursor-pointer"
+            >
+              تجاهل
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-hub-border">
         <div>

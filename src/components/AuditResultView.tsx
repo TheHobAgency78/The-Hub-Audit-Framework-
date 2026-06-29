@@ -1558,9 +1558,9 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
             </div>
           </div>
 
-          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500 font-mono">
-            <span>THE HUB BRAND ACCELERATION SYSTEM © 2026</span>
-            <span>PAGE 01 / 04</span>
+          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500">
+            <span>جميع الحقوق محفوظة © ٢٠٢٦ لأصيل الحبيشي ووكالة THE HUB Agency</span>
+            <span className="font-mono">PAGE 01 / 05</span>
           </div>
         </div>
 
@@ -1614,9 +1614,9 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
             </div>
           </div>
 
-          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500 font-mono">
-            <span>THE HUB BRAND ACCELERATION SYSTEM © 2026</span>
-            <span>PAGE 02 / 04</span>
+          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500">
+            <span>جميع الحقوق محفوظة © ٢٠٢٦ لأصيل الحبيشي ووكالة THE HUB Agency</span>
+            <span className="font-mono">PAGE 02 / 05</span>
           </div>
         </div>
 
@@ -1665,9 +1665,9 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
             </div>
           </div>
 
-          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500 font-mono">
-            <span>THE HUB BRAND ACCELERATION SYSTEM © 2026</span>
-            <span>PAGE 03 / 04</span>
+          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500">
+            <span>جميع الحقوق محفوظة © ٢٠٢٦ لأصيل الحبيشي ووكالة THE HUB Agency</span>
+            <span className="font-mono">PAGE 03 / 05</span>
           </div>
         </div>
 
@@ -1753,9 +1753,155 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
             </div>
           </div>
 
-          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500 font-mono">
-            <span>THE HUB BRAND ACCELERATION SYSTEM © 2026</span>
-            <span>PAGE 04 / 04</span>
+          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500">
+            <span>جميع الحقوق محفوظة © ٢٠٢٦ لأصيل الحبيشي ووكالة THE HUB Agency</span>
+            <span className="font-mono">PAGE 04 / 05</span>
+          </div>
+        </div>
+
+        {/* Page 5: Visual Charts & Analytics */}
+        <div className="pdf-page w-[794px] h-[1122px] p-12 bg-[#0A0B0E] border border-hub-border flex flex-col justify-between relative overflow-hidden" dir="rtl">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-[#58A6FF]/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#EAB308]/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex justify-between items-center border-b border-hub-border pb-4">
+            <div className="text-right">
+              <span className="text-[10px] text-hub-gold font-bold block">المرحلة 8</span>
+              <h3 className="text-sm font-black text-white">الرسوم البيانية وتحليل منحنى الأداء الرقمي</h3>
+            </div>
+            <span className="text-[9px] px-2.5 py-1 rounded bg-[#0D1117] border border-hub-border text-hub-accent/80 font-mono">
+              VISUAL METRICS & ANALYTICS PRO
+            </span>
+          </div>
+
+          <div className="my-auto space-y-6 text-right">
+            <p className="text-[11px] text-gray-400 pr-1 leading-relaxed">
+              تحليل مرئي شامل يستعرض حركة التطور التاريخي للحساب مقارنة بمؤشرات كفاءة الأبعاد الخوارزمية العشر لعلامتكم التجارية:
+            </p>
+
+            {/* Chart 1: Historical Trend Curve */}
+            <div className="bg-[#0D1117]/80 border border-hub-border rounded-xl p-5 space-y-3">
+              <h4 className="text-xs font-black text-white flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#58A6FF]" />
+                أولاً: منحنى الأداء التاريخي والنمو المتوقع للعلامة (Audit Timeline)
+              </h4>
+              <div className="w-full flex justify-center bg-[#07090E] p-3 rounded-lg border border-hub-border/50">
+                {/* Custom Inline SVG Area Chart */}
+                <svg width="680" height="150" viewBox="0 0 680 150" className="overflow-visible">
+                  <defs>
+                    <linearGradient id="pdfColorScore" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#58A6FF" stopOpacity="0.4"/>
+                      <stop offset="100%" stopColor="#58A6FF" stopOpacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  
+                  {/* Grid Lines */}
+                  <line x1="50" y1="20" x2="640" y2="20" stroke="#21262D" strokeDasharray="3 3" />
+                  <line x1="50" y1="50" x2="640" y2="50" stroke="#21262D" strokeDasharray="3 3" />
+                  <line x1="50" y1="80" x2="640" y2="80" stroke="#21262D" strokeDasharray="3 3" />
+                  <line x1="50" y1="110" x2="640" y2="110" stroke="#21262D" strokeDasharray="3 3" />
+                  <line x1="50" y1="130" x2="640" y2="130" stroke="#21262D" />
+
+                  {/* Y-Axis Labels */}
+                  <text x="40" y="24" fill="#8B949E" fontSize="8" textAnchor="end">١٠٠</text>
+                  <text x="40" y="54" fill="#8B949E" fontSize="8" textAnchor="end">٧٥</text>
+                  <text x="40" y="84" fill="#8B949E" fontSize="8" textAnchor="end">٥٠</text>
+                  <text x="40" y="114" fill="#8B949E" fontSize="8" textAnchor="end">٢٥</text>
+                  <text x="40" y="134" fill="#8B949E" fontSize="8" textAnchor="end">٠</text>
+
+                  {/* Dynamic Curve Calculations */}
+                  {(() => {
+                    const points = chartData.map((d, idx) => {
+                      const x = 75 + idx * (540) / (chartData.length - 1 || 1);
+                      const y = 130 - (d.score / 100) * 105;
+                      return { x, y, score: d.score, name: d.name, label: d.label };
+                    });
+                    
+                    const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                    const areaD = `${pathD} L ${points[points.length-1].x} 130 L ${points[0].x} 130 Z`;
+                    
+                    return (
+                      <>
+                        {/* Area Fill */}
+                        <path d={areaD} fill="url(#pdfColorScore)" />
+                        {/* Area Stroke line */}
+                        <path d={pathD} fill="none" stroke="#58A6FF" strokeWidth="2.5" />
+                        
+                        {/* Points and data labels */}
+                        {points.map((p, idx) => (
+                          <g key={idx}>
+                            <circle cx={p.x} cy={p.y} r="6" fill="#0A0B0E" stroke="#58A6FF" strokeWidth="2" />
+                            <circle cx={p.x} cy={p.y} r="2" fill="#58A6FF" />
+                            <text x={p.x} y={p.y - 12} fill="#ffffff" fontSize="9" fontWeight="bold" textAnchor="middle">{p.score}%</text>
+                            <text x={p.x} y="144" fill="#8B949E" fontSize="9" textAnchor="middle">{p.name}</text>
+                            <text x={p.x} y="15" fill="#8B949E" fontSize="8" textAnchor="middle" opacity="0.6">{p.label}</text>
+                          </g>
+                        ))}
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
+            </div>
+
+            {/* Chart 2: 10 Dimensions Horizontal Benchmarks */}
+            <div className="bg-[#0D1117]/80 border border-hub-border rounded-xl p-5 space-y-3">
+              <h4 className="text-xs font-black text-white flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-hub-gold" />
+                ثانياً: خريطة مقارنة أبعاد كفاءة محرك النمو (Dimensions Diagnostics)
+              </h4>
+              <div className="w-full bg-[#07090E] p-4 rounded-lg border border-hub-border/50 flex justify-center">
+                <svg width="680" height="230" viewBox="0 0 680 230" className="overflow-visible">
+                  {report.dimensions && report.dimensions.map((dim, idx) => {
+                    const rowY = 12 + idx * 21;
+                    const barWidth = (dim.score / 10) * 320;
+                    const isHigh = dim.score >= 8;
+                    const isMid = dim.score >= 5;
+                    const color = isHigh ? '#10B981' : isMid ? '#EAB308' : '#EF4444';
+                    
+                    return (
+                      <g key={idx}>
+                        {/* Dimension index and name */}
+                        <text x="20" y={rowY + 9} fill="#8B949E" fontSize="8" fontWeight="bold" textAnchor="start">
+                          {(idx+1).toString().padStart(2, '0')}
+                        </text>
+                        <text x="35" y={rowY + 9} fill="#FFFFFF" fontSize="9" fontWeight="bold" textAnchor="start">
+                          {dim.name}
+                        </text>
+
+                        {/* Benchmark Bar Grid lines */}
+                        <line x1="330" y1="2" x2="330" y2="225" stroke="#1F2937" strokeWidth="1" />
+                        <line x1="410" y1="2" x2="410" y2="225" stroke="#1F2937" strokeWidth="1" strokeDasharray="2 2" />
+                        <line x1="490" y1="2" x2="490" y2="225" stroke="#1F2937" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.5" />
+                        <line x1="570" y1="2" x2="570" y2="225" stroke="#1F2937" strokeWidth="1" strokeDasharray="2 2" />
+                        <line x1="650" y1="2" x2="650" y2="225" stroke="#1F2937" strokeWidth="1" />
+
+                        {/* Bar background */}
+                        <rect x="330" y={rowY + 2} width="320" height="8" rx="4" fill="#161B22" />
+                        {/* Actual Bar */}
+                        <rect x="330" y={rowY + 2} width={barWidth} height="8" rx="4" fill={color} />
+                        
+                        {/* Score text */}
+                        <text x="658" y={rowY + 9} fill={color} fontSize="9" fontWeight="black" textAnchor="start">
+                          {dim.score}/١٠
+                        </text>
+                      </g>
+                    );
+                  })}
+                  {/* Bottom scale labels */}
+                  <text x="330" y="228" fill="#555" fontSize="7" textAnchor="middle">٠</text>
+                  <text x="410" y="228" fill="#555" fontSize="7" textAnchor="middle">٢.٥</text>
+                  <text x="490" y="228" fill="#555" fontSize="7" textAnchor="middle">٥</text>
+                  <text x="570" y="228" fill="#555" fontSize="7" textAnchor="middle">٧.٥</text>
+                  <text x="650" y="228" fill="#555" fontSize="7" textAnchor="middle">١٠</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-gray-500">
+            <span>جميع الحقوق محفوظة © ٢٠٢٦ لأصيل الحبيشي ووكالة THE HUB Agency</span>
+            <span className="font-mono">PAGE 05 / 05</span>
           </div>
         </div>
       </div>
@@ -2007,9 +2153,9 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
         </div>
 
         {/* Card Footer brand statement */}
-        <div className="border-t border-hub-border/50 pt-4 flex justify-between items-center text-[9px] text-slate-400 font-mono">
-          <span>THE HUB PLATFORM SHIELD SYSTEM © 2026</span>
-          <span className="text-amber-500 font-black tracking-widest leading-none">THE HUB DIGITAL AGENCY</span>
+        <div className="border-t border-slate-200 pt-4 flex justify-between items-center text-[9px] text-slate-500">
+          <span>حقوق النشر © ٢٠٢٦ محفوظة لـ أصيل الحبيشي ووكالة THE HUB Agency</span>
+          <span className="text-amber-600 font-black tracking-widest leading-none">THE HUB DIGITAL AGENCY</span>
         </div>
       </div>
     </div>

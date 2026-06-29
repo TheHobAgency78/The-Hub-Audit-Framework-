@@ -250,9 +250,16 @@ export default function App() {
           )}
 
           {/* Status Badge */}
-          <div className="hidden md:flex items-center gap-2 text-xs bg-hub-bg border border-hub-border/60 rounded-full py-1 px-3">
-            <Activity className="w-3.5 h-3.5 text-hub-emerald animate-pulse" />
-            <span className="text-gray-400 text-[10px] font-bold">نسخة الإطار V1 تشغيلية</span>
+          <div className="hidden md:flex items-center gap-4 text-xs bg-hub-bg border border-hub-border/60 rounded-full py-1.5 px-4">
+            <div className="flex items-center gap-2">
+              <Activity className="w-3.5 h-3.5 text-hub-emerald animate-pulse" />
+              <span className="text-gray-400 text-[10px] font-bold">نسخة الإطار V1 تشغيلية</span>
+            </div>
+            <div className="w-px h-3 bg-hub-border" />
+            <div className="flex items-center gap-1.5" title="جاهز لاستقبال بيانات n8n Webhook">
+              <span className="w-1.5 h-1.5 rounded-full bg-hub-gold-light animate-pulse" />
+              <span className="text-hub-gold-light text-[10px] font-extrabold">بوابة أتمتة n8n جاهزة</span>
+            </div>
           </div>
 
         </div>
@@ -504,9 +511,9 @@ export default function App() {
       {/* 4. FOOTER AREA */}
       <footer className="border-t border-hub-border bg-hub-card py-6 mt-12 text-center text-xs text-gray-500 no-print">
         <div className="max-w-7xl mx-auto px-4 space-y-2">
-          <p className="font-bold">مستند الفحص الخوارزمي والتجاري المتقدم — وكالة THE HUB © 2026</p>
+          <p className="font-bold">حقوق الطبع والنشر © ٢٠٢٦ محفوظة للمطور أصيل الحبيشي ووكالة THE HUB Agency</p>
           <p className="text-[10px] text-gray-600 max-w-lg mx-auto leading-relaxed">
-            تخضع منصة التدقيق هذه للسرية التامة للوكالة الحاضنة. تم تصنيف وتحليل مصلحة محركات النشر بناء على براءات خوارزميات TikTok, Meta, YouTube الحديثة لعام 2026.
+            مستند الفحص الخوارزمي والتجاري المتقدم. تخضع منصة التدقيق هذه للسرية التامة للوكالة الحاضنة. تم تصنيف وتحليل مصلحة محركات النشر بناء على براءات خوارزميات TikTok, Meta, YouTube الحديثة لعام 2026.
           </p>
         </div>
       </footer>
