@@ -7,6 +7,7 @@ export interface ClientDataInput {
   clientName: string;
   niche: string;
   platform: 'instagram' | 'tiktok' | 'youtube_shorts' | 'x' | 'all';
+  profileUrl: string;
   followersCount: string;
   activeCommunitySize: string; // engagement observations (active commenting/sharing)
   first3sRetention: string;   // e.g. "30%", "60%", "not_sure"

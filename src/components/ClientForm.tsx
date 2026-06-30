@@ -100,6 +100,7 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
       clientName: localStorage.getItem('hub_clientName') || '',
       niche: localStorage.getItem('hub_niche') || '',
       platform: (localStorage.getItem('hub_platform') as ClientDataInput['platform']) || 'instagram',
+      profileUrl: localStorage.getItem('hub_profileUrl') || '',
       followersCount: localStorage.getItem('hub_followersCount') || '',
       activeCommunitySize: localStorage.getItem('hub_activeCommunitySize') || '',
       first3sRetention: localStorage.getItem('hub_first3sRetention') || '',
@@ -183,6 +184,15 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
         { value: 'all', label: 'كل المنصات كحزمة متكاملة (All Platforms)' }
       ],
       fieldKeys: ['platform']
+    },
+    {
+      name: 'profileUrl',
+      title: 'رابط الحساب المستهدف (URL)',
+      question: 'رائع! يرجى تزويدنا برابط الحساب المستهدف بالتحليل (URL) للعلامة التجارية: 🔗',
+      placeholder: 'مثال: https://instagram.com/username',
+      type: 'text',
+      fieldKeys: ['profileUrl'],
+      presetChips: ['https://instagram.com/thehub.agency', 'https://tiktok.com/@thehub.agency']
     },
     {
       name: 'followersCount',
@@ -279,6 +289,7 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
     localStorage.setItem('hub_clientName', formData.clientName || '');
     localStorage.setItem('hub_niche', formData.niche || '');
     localStorage.setItem('hub_platform', formData.platform || 'instagram');
+    localStorage.setItem('hub_profileUrl', formData.profileUrl || '');
     localStorage.setItem('hub_followersCount', formData.followersCount || '');
     localStorage.setItem('hub_activeCommunitySize', formData.activeCommunitySize || '');
     localStorage.setItem('hub_first3sRetention', formData.first3sRetention || '');
@@ -301,6 +312,7 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
         'hub_clientName',
         'hub_niche',
         'hub_platform',
+        'hub_profileUrl',
         'hub_followersCount',
         'hub_activeCommunitySize',
         'hub_first3sRetention',
@@ -322,6 +334,7 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
         clientName: '',
         niche: '',
         platform: 'instagram',
+        profileUrl: '',
         followersCount: '',
         activeCommunitySize: '',
         first3sRetention: '',
@@ -399,6 +412,7 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
                   clientName: latestN8n.clientName || '',
                   niche: latestN8n.niche || '',
                   platform: latestN8n.platform || 'instagram',
+                  profileUrl: latestN8n.profileUrl || '',
                   followersCount: latestN8n.followersCount || '',
                   activeCommunitySize: latestN8n.activeCommunitySize || '',
                   first3sRetention: latestN8n.first3sRetention || '',
@@ -786,6 +800,21 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
               <option value="x">منصة إكس (X / Twitter Content)</option>
               <option value="all">كل المنصات كحزمة متكاملة (All Platforms)</option>
             </select>
+          </div>
+
+          {/* Target Profile URL */}
+          <div className="flex flex-col gap-1.5 md:col-span-2 lg:col-span-3">
+            <label className="text-xs font-semibold text-gray-300">رابط الحساب المستهدف (URL)</label>
+            <input
+              type="url"
+              name="profileUrl"
+              placeholder="مثال: https://instagram.com/username"
+              value={formData.profileUrl}
+              onChange={handleInputChange}
+              className="bg-hub-bg border border-hub-border text-sm text-gray-100 rounded-lg p-2.5 focus:border-hub-accent focus:outline-none transition-all placeholder:text-gray-600 font-mono text-left"
+              dir="ltr"
+              id="input_profileUrl"
+            />
           </div>
         </div>
 

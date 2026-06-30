@@ -649,6 +649,23 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
               <span><strong>المجال:</strong> {report.inputData.niche || 'غير محدد'}</span>
               <span>•</span>
               <span><strong>المنصة:</strong> {formatPlatform(report.inputData.platform)}</span>
+              {report.inputData.profileUrl && (
+                <>
+                  <span>•</span>
+                  <span>
+                    <strong>رابط الحساب:</strong>{' '}
+                    <a 
+                      href={report.inputData.profileUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-hub-accent hover:underline inline-flex items-center gap-1 font-mono"
+                      dir="ltr"
+                    >
+                      {report.inputData.profileUrl}
+                    </a>
+                  </span>
+                </>
+              )}
               <span>•</span>
               <span><strong>التاريخ:</strong> {new Date(report.timestamp).toLocaleString('ar-EG')}</span>
             </div>
@@ -751,6 +768,7 @@ ${report.recommendedServices.map(s => `* **الخدمة المقترحة:** ${s.
           <span><strong>اسم العميل:</strong> {report.inputData.clientName}</span>
           <span><strong>النشاط بالتحديد:</strong> {report.inputData.niche}</span>
           <span><strong>المنصة الخوارزمية:</strong> {formatPlatform(report.inputData.platform)}</span>
+          <span><strong>رابط الحساب المستهدف:</strong> {report.inputData.profileUrl || 'غير محدد'}</span>
           <span><strong>إجمالي نقاط التقييم HUB SCORE:</strong> {report.hubScore}/100</span>
         </div>
       </div>

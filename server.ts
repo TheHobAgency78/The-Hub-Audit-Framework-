@@ -172,6 +172,7 @@ app.post('/api/audit', async (req, res) => {
 - اسم العميل: ${clientData.clientName}
 - المجال/النشاط التجاري: ${clientData.niche || 'غير محدد'}
 - المنصة الأساسية المستهدفة بالتحليل: ${clientData.platform || 'غير محدد'}
+- رابط الحساب المستهدف (URL): ${clientData.profileUrl || 'غير محدد'}
 - عدد المتابعين الحاليين: ${clientData.followersCount || 'غير محدد'}
 - حجم المجتمع المتفاعل ونشاطه: ${clientData.activeCommunitySize || 'غير محدد'}
 - نسبة الاحتفاظ في أول 3 ثوانٍ (Hook Retention): ${clientData.first3sRetention || 'غير محدد'}
@@ -405,6 +406,7 @@ app.post('/api/webhook/n8n', (req, res) => {
       clientName: getVal(['clientName', 'client_name', 'client', 'اسم العميل', 'الاسم', 'name', 'اسم_العميل']),
       niche: getVal(['niche', 'activity', 'النشاط', 'المجال', 'التخصص', 'القطاع', 'نوع النشاط']),
       platform,
+      profileUrl: getVal(['profileUrl', 'profile_url', 'profile', 'رابط الحساب', 'الرابط', 'url', 'رابط_الحساب', 'رابط الحساب المستهدف']),
       followersCount: getVal(['followersCount', 'followers_count', 'followers', 'عدد المتابعين', 'المتابعين', 'متابعين']),
       activeCommunitySize: getVal(['activeCommunitySize', 'active_community_size', 'community_size', 'حجم المجتمع', 'نشاط المجتمع', 'الجمهور', 'التفاعل']),
       first3sRetention: getVal(['first3sRetention', 'first_3s_retention', 'hook_rate', 'hookRate', 'first3s', 'نسبة الاحتفاظ', 'الاحتفاظ أول 3 ثواني', 'الاحتفاظ', 'هوك']),
