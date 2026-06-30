@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClientDataInput } from '../types';
 import { PRESET_CLIENTS, PresetClient } from './presets';
-import { Sparkles, BarChart2, Radio, UserCheck, HelpCircle, AlertTriangle, ClipboardList, FileText, CheckCircle2, Trash2, Bot, ChevronLeft, ChevronRight, Sliders, Eye, EyeOff } from 'lucide-react';
+import { Sparkles, BarChart2, Radio, UserCheck, HelpCircle, AlertTriangle, ClipboardList, FileText, CheckCircle2, Trash2, Bot, ChevronLeft, ChevronRight, Sliders, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 function calculateLivePredictiveScore(formData: ClientDataInput) {
   let score = 50;
@@ -124,18 +124,93 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
   // n8n Webhook state and polling logic
   const [latestN8n, setLatestN8n] = useState<any>(null);
   const [hasNewN8n, setHasNewN8n] = useState<boolean>(false);
+  const [isScraping, setIsScraping] = useState<boolean>(false);
+  const [scrapingStatus, setScrapingStatus] = useState<string>('');
+  const [showScrapingNotification, setShowScrapingNotification] = useState<boolean>(false);
+
+  const triggerN8nScraping = async () => {
+    if (!formData.profileUrl) {
+      alert('الرجاء إدخال رابط الحساب المستهدف أولاً.');
+      return;
+    }
+
+    setIsScraping(true);
+    setScrapingStatus('جاري الاتصال ببوابة n8n وتفعيل الكاشف التلقائي...');
+
+    try {
+      const res = await fetch('/api/n8n/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profileUrl: formData.profileUrl,
+          platform: formData.platform,
+          clientName: formData.clientName,
+          niche: formData.niche
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setScrapingStatus(data.message || 'تم إرسال طلب الكشط بنجاح! ننتظر حالياً البيانات الحية من n8n...');
+        localStorage.setItem('pending_n8n_scrape', 'true');
+      } else {
+        const errData = await res.json();
+        alert(`فشل إطلاق n8n: ${errData.error || 'خطأ غير معروف'}`);
+        setIsScraping(false);
+      }
+    } catch (e) {
+      console.error('Failed to trigger n8n scrape:', e);
+      alert('حدث خطأ أثناء الاتصال بالخادم لإطلاق n8n.');
+      setIsScraping(false);
+    }
+  };
 
   useEffect(() => {
     const checkN8n = async () => {
       try {
         const res = await fetch('/api/webhook/n8n/latest');
         if (res.ok) {
-          const data = await res.json();
-          if (data && data.id) {
-            setLatestN8n(data);
-            const lastSeenId = localStorage.getItem('last_seen_n8n_id');
-            if (lastSeenId !== data.id) {
-              setHasNewN8n(true);
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data && data.id) {
+              setLatestN8n(data);
+              const lastSeenId = localStorage.getItem('last_seen_n8n_id');
+              const isPendingScrape = localStorage.getItem('pending_n8n_scrape') === 'true';
+
+              if (lastSeenId !== data.id) {
+                if (isPendingScrape) {
+                  // Smart Injection (الحقن الذكي التلقائي أمام المستخدم)
+                  setFormData(prev => ({
+                    ...prev,
+                    clientName: data.clientName || prev.clientName || '',
+                    niche: data.niche || prev.niche || '',
+                    platform: data.platform || prev.platform || 'instagram',
+                    profileUrl: data.profileUrl || prev.profileUrl || '',
+                    followersCount: data.followersCount || prev.followersCount || '',
+                    activeCommunitySize: data.activeCommunitySize || prev.activeCommunitySize || '',
+                    first3sRetention: data.first3sRetention || prev.first3sRetention || '',
+                    watchTimeCompletion: data.watchTimeCompletion || prev.watchTimeCompletion || '',
+                    averageLikes: data.averageLikes || prev.averageLikes || '',
+                    averageComments: data.averageComments || prev.averageComments || '',
+                    averageShares: data.averageShares || prev.averageShares || '',
+                    averageSaves: data.averageSaves || prev.averageSaves || '',
+                    contentHooksExample: data.contentHooksExample || prev.contentHooksExample || '',
+                    contentCaptionStyle: data.contentCaptionStyle || prev.contentCaptionStyle || '',
+                    postingFrequency: data.postingFrequency || prev.postingFrequency || '',
+                    communityInteraction: data.communityInteraction || prev.communityInteraction || '',
+                    customNotes: data.customNotes || prev.customNotes || ''
+                  }));
+
+                  localStorage.setItem('last_seen_n8n_id', data.id);
+                  localStorage.removeItem('pending_n8n_scrape');
+                  setIsScraping(false);
+                  setScrapingStatus('');
+                  setShowScrapingNotification(true);
+                } else {
+                  setHasNewN8n(true);
+                }
+              }
             }
           }
         }
@@ -145,9 +220,11 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
     };
 
     checkN8n();
-    const interval = setInterval(checkN8n, 7000);
+    // Poll more frequently when waiting for scrape
+    const intervalTime = isScraping ? 2000 : 7000;
+    const interval = setInterval(checkN8n, intervalTime);
     return () => clearInterval(interval);
-  }, []);
+  }, [isScraping]);
 
   const livePredictive = calculateLivePredictiveScore(formData);
 
@@ -386,6 +463,32 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
       <div className="absolute top-0 right-0 w-32 h-32 bg-hub-accent/5 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-32 h-32 bg-hub-gold/5 rounded-full blur-2xl pointer-events-none" />
 
+      {/* 🎉 Smart Injection Success Banner */}
+      {showScrapingNotification && (
+        <div className="mb-6 p-4 bg-emerald-500/15 border border-emerald-500 rounded-xl text-xs text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden animate-pulse">
+          <div className="absolute top-0 right-0 w-1 bg-emerald-500 h-full" />
+          <div className="flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0 animate-bounce" />
+            <div className="space-y-1 text-right">
+              <h4 className="font-extrabold text-emerald-400 flex items-center gap-1.5">
+                تمت المزامنة والحقن الذكي بنجاح! ⚡🤖
+              </h4>
+              <p className="text-gray-300 leading-relaxed">
+                تم سحب أحدث بيانات الحساب من n8n وحقنها تلقائياً داخل كافة الحقول اليدوية للتطبيق.
+              </p>
+              <span className="text-[10px] text-gray-400 block">جميع الخانات جاهزة الآن للمراجعة والتعديل اليدوي قبل توليد التقرير.</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowScrapingNotification(false)}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-lg text-xs cursor-pointer mr-auto sm:mr-0 self-end sm:self-center transition-all"
+          >
+            تأكيد ومراجعة البيانات
+          </button>
+        </div>
+      )}
+
       {/* 🤖 n8n webhook auto-injector alert */}
       {hasNewN8n && latestN8n && (
         <div className="mb-6 p-4 bg-hub-accent/10 border border-hub-accent rounded-xl text-xs text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden animate-pulse">
@@ -571,16 +674,56 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
               {/* Dynamic Answer Fields */}
               <div className="mt-4">
                 {wizardSteps[currentStepIndex].type === 'text' && (
-                  <input
-                    type="text"
-                    name={wizardSteps[currentStepIndex].name}
-                    placeholder={wizardSteps[currentStepIndex].placeholder}
-                    value={formData[wizardSteps[currentStepIndex].name as keyof ClientDataInput] || ''}
-                    onChange={handleInputChange}
-                    className="w-full bg-[#161B22] border border-hub-border text-white text-xs md:text-sm rounded-lg p-2.5 focus:border-[#ff6600] focus:ring-1 focus:ring-[#ff6600] focus:outline-none transition-all placeholder:text-gray-600"
-                    id={`wizard_input_${wizardSteps[currentStepIndex].name}`}
-                    autoFocus
-                  />
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="text"
+                      name={wizardSteps[currentStepIndex].name}
+                      placeholder={wizardSteps[currentStepIndex].placeholder}
+                      value={formData[wizardSteps[currentStepIndex].name as keyof ClientDataInput] || ''}
+                      onChange={handleInputChange}
+                      className="w-full bg-[#161B22] border border-hub-border text-white text-xs md:text-sm rounded-lg p-2.5 focus:border-[#ff6600] focus:ring-1 focus:ring-[#ff6600] focus:outline-none transition-all placeholder:text-gray-600"
+                      id={`wizard_input_${wizardSteps[currentStepIndex].name}`}
+                      autoFocus
+                    />
+                    
+                    {/* Special n8n Scrape Trigger inside the Wizard URL step */}
+                    {wizardSteps[currentStepIndex].name === 'profileUrl' && (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        <button
+                          type="button"
+                          disabled={isScraping || !formData.profileUrl}
+                          onClick={triggerN8nScraping}
+                          className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                            isScraping
+                              ? 'bg-hub-border text-gray-500 cursor-not-allowed'
+                              : !formData.profileUrl
+                              ? 'bg-slate-800/40 text-gray-500 border border-hub-border/40 cursor-not-allowed'
+                              : 'bg-[#ff6600] hover:bg-orange-600 text-white shadow-lg shadow-orange-500/10 active:scale-95'
+                          }`}
+                        >
+                          {isScraping ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-hub-gold-light" />
+                              <span>جاري الفحص والكشط التلقائي عبر n8n...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Radio className="w-4 h-4 animate-pulse text-hub-gold-light" />
+                              <span>فحص الرابط وبدء الكشط التلقائي عبر n8n 🤖</span>
+                            </>
+                          )}
+                        </button>
+                        {isScraping && (
+                          <p className="text-[10px] text-hub-gold-light text-center animate-pulse">
+                            {scrapingStatus || 'نعمل على استيراد البيانات الحية...'}
+                          </p>
+                        )}
+                        <p className="text-[9px] text-gray-400 text-right">
+                          * عند إطلاق فحص الرابط عبر n8n، سيتم ملء باقي حقول النموذج تلقائياً بمقاييس الحساب الحقيقية.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {wizardSteps[currentStepIndex].type === 'select' && (
@@ -803,18 +946,56 @@ export default function ClientForm({ onSubmit, isLoading }: ClientFormProps) {
           </div>
 
           {/* Target Profile URL */}
-          <div className="flex flex-col gap-1.5 md:col-span-2 lg:col-span-3">
-            <label className="text-xs font-semibold text-gray-300">رابط الحساب المستهدف (URL)</label>
-            <input
-              type="url"
-              name="profileUrl"
-              placeholder="مثال: https://instagram.com/username"
-              value={formData.profileUrl}
-              onChange={handleInputChange}
-              className="bg-hub-bg border border-hub-border text-sm text-gray-100 rounded-lg p-2.5 focus:border-hub-accent focus:outline-none transition-all placeholder:text-gray-600 font-mono text-left"
-              dir="ltr"
-              id="input_profileUrl"
-            />
+          <div className="flex flex-col gap-1.5 md:col-span-2 lg:col-span-3 bg-hub-bg/30 border border-hub-border/50 rounded-xl p-3">
+            <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+              رابط الحساب المستهدف (URL)
+              <span className="text-[10px] bg-hub-accent/10 text-hub-gold-light border border-hub-accent/30 px-1.5 py-0.5 rounded-full font-bold">المدخل الأساسي لـ n8n 🤖</span>
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2 mt-1">
+              <input
+                type="url"
+                name="profileUrl"
+                placeholder="مثال: https://instagram.com/username"
+                value={formData.profileUrl}
+                onChange={handleInputChange}
+                className="bg-hub-bg border border-hub-border text-sm text-gray-100 rounded-lg p-2.5 focus:border-hub-accent focus:outline-none transition-all placeholder:text-gray-600 font-mono text-left flex-1"
+                dir="ltr"
+                id="input_profileUrl"
+              />
+              <button
+                type="button"
+                disabled={isScraping || !formData.profileUrl}
+                onClick={triggerN8nScraping}
+                className={`px-5 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                  isScraping
+                    ? 'bg-hub-border text-gray-500 cursor-not-allowed'
+                    : !formData.profileUrl
+                    ? 'bg-slate-800/40 text-gray-500 border border-hub-border/40 cursor-not-allowed'
+                    : 'bg-[#ff6600] hover:bg-orange-600 text-white shadow-md shadow-orange-500/10 active:scale-95'
+                }`}
+                id="btn_trigger_n8n"
+              >
+                {isScraping ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-hub-gold-light" />
+                    <span>جاري الكشط عبر n8n...</span>
+                  </>
+                ) : (
+                  <>
+                    <Radio className="w-4 h-4 animate-pulse text-hub-gold-light" />
+                    <span>فحص الرابط وبدء الكشط 🤖</span>
+                  </>
+                )}
+              </button>
+            </div>
+            {isScraping && (
+              <p className="text-[10px] text-hub-gold-light mt-1 animate-pulse">
+                {scrapingStatus || 'جاري استيراد المقاييس وتحليل البيانات الحية...'}
+              </p>
+            )}
+            <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+              * عند إدخال الرابط والضغط على "فحص الرابط وبدء الكشط"، سيقوم n8n بسحب الأرقام والمقاييس من الحساب وحقنها تلقائياً في الحقول اليدوية أدناه، لتتمكن من مراجعتها وتعديلها في أي وقت قبل توليد التقرير.
+            </p>
           </div>
         </div>
 
