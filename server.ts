@@ -358,35 +358,50 @@ const N8N_PAYLOAD_FILE = path.join(process.cwd(), 'latest_n8n_payload.json');
 // POST Endpoint for n8n Webhook
 app.post('/api/webhook/n8n', (req, res) => {
   try {
-    const body = req.body;
-    if (!body || typeof body !== 'object') {
+    let payload = req.body;
+    if (!payload) {
       return res.status(400).json({ error: 'Payload must be a JSON object' });
     }
 
-    // Helper to extract value by matching keys/synonyms
-    const getVal = (synonyms: string[]): string => {
+    // Handle payload wrapped in an array (e.g. Apify list)
+    if (Array.isArray(payload)) {
+      const first = payload[0] || {};
+      if (first.followersCount !== undefined || first.followers !== undefined || first.biography !== undefined || first.description !== undefined) {
+        payload = first;
+      }
+    }
+
+    // Helper to safely convert value to clean string
+    const safeStr = (val: any): string => {
+      if (val === undefined || val === null) return '';
+      return String(val).trim();
+    };
+
+    // Helper to extract value using synonyms/alternatives
+    const getValFrom = (obj: any, synonyms: string[]): string => {
+      if (!obj || typeof obj !== 'object') return '';
       for (const syn of synonyms) {
-        if (body[syn] !== undefined && body[syn] !== null) {
-          return String(body[syn]);
+        if (obj[syn] !== undefined && obj[syn] !== null) {
+          return safeStr(obj[syn]);
         }
-        // Case-insensitive / underscore match
+        // Match case-insensitive or underscore-insensitive keys
         const lowerSyn = syn.toLowerCase();
-        for (const key of Object.keys(body)) {
+        for (const key of Object.keys(obj)) {
           const lowerKey = key.toLowerCase();
           if (
             lowerKey === lowerSyn ||
             lowerKey === lowerSyn.replace(/_/g, '') ||
             lowerKey.replace(/_/g, '') === lowerSyn
           ) {
-            return String(body[key]);
+            return safeStr(obj[key]);
           }
         }
       }
       return '';
     };
 
-    // Extracting platform and normalizing it to known keys
-    const rawPlatform = getVal(['platform', 'المنصة', 'المنصة المستهدفة', 'target_platform', 'targetPlatform', 'المنصه']).toLowerCase();
+    // 1. Platform normalization
+    const rawPlatform = getValFrom(payload, ['platform', 'المنصة', 'المنصة المستهدفة', 'target_platform', 'targetPlatform', 'المنصه']).toLowerCase();
     let platform: 'instagram' | 'tiktok' | 'youtube_shorts' | 'x' | 'all' = 'instagram';
     if (rawPlatform.includes('tiktok') || rawPlatform.includes('تيك') || rawPlatform.includes('تك')) {
       platform = 'tiktok';
@@ -400,26 +415,149 @@ app.post('/api/webhook/n8n', (req, res) => {
       platform = 'instagram';
     }
 
+    // 2. Client Name
+    const clientName = getValFrom(payload, ['clientName', 'client_name', 'client', 'اسم العميل', 'الاسم', 'name', 'username', 'fullName', 'full_name', 'owner']);
+
+    // 3. Followers Count (Prioritize real variable: followers, followersCount)
+    const followersCount = getValFrom(payload, ['followers', 'followersCount', 'followers_count', 'followerCount', 'follower_count', 'follower', 'المتابعين', 'متابعين', 'عدد المتابعين']);
+
+    // 4. Niche / Bio (Prioritize biography, description)
+    const niche = getValFrom(payload, ['biography', 'description', 'bio', 'niche', 'activity', 'النشاط', 'المجال', 'التخصص', 'القطاع', 'نوع النشاط']);
+
+    // 5. Target Profile URL
+    const profileUrl = getValFrom(payload, ['profileUrl', 'profile_url', 'profile', 'رابط الحساب', 'الرابط', 'url', 'رابط_الحساب', 'رابط الحساب المستهدف']);
+
+    // 6. Dynamic scraping metrics calculation from Apify posts array (latestPosts, posts, items, or root array)
+    let postsArray: any[] = [];
+    if (Array.isArray(req.body)) {
+      const first = req.body[0] || {};
+      if (first.followersCount === undefined && first.followers === undefined && (first.likesCount !== undefined || first.commentsCount !== undefined || first.playCount !== undefined || first.diggCount !== undefined)) {
+        postsArray = req.body;
+      }
+    } else if (payload && typeof payload === 'object') {
+      if (Array.isArray(payload.latestPosts)) {
+        postsArray = payload.latestPosts;
+      } else if (Array.isArray(payload.posts)) {
+        postsArray = payload.posts;
+      } else if (Array.isArray(payload.items)) {
+        postsArray = payload.items;
+      }
+    }
+
+    let calculatedLikes = '';
+    let calculatedComments = '';
+    let calculatedShares = '';
+    let calculatedSaves = '';
+
+    if (postsArray && postsArray.length > 0) {
+      let totalLikes = 0;
+      let totalComments = 0;
+      let totalShares = 0;
+      let totalSaves = 0;
+      let likesCountWeighted = 0;
+      let commentsCountWeighted = 0;
+      let sharesCountWeighted = 0;
+      let savesCountWeighted = 0;
+
+      for (const post of postsArray) {
+        if (!post || typeof post !== 'object') continue;
+
+        // Likes extraction
+        const likes = post.likesCount !== undefined ? post.likesCount :
+                      post.likes !== undefined ? post.likes :
+                      post.likeCount !== undefined ? post.likeCount :
+                      post.likes_count !== undefined ? post.likes_count :
+                      post.diggCount !== undefined ? post.diggCount :
+                      post.digg_count !== undefined ? post.digg_count : null;
+        if (likes !== null && !isNaN(Number(likes))) {
+          totalLikes += Number(likes);
+          likesCountWeighted++;
+        }
+
+        // Comments extraction
+        const comments = post.commentsCount !== undefined ? post.commentsCount :
+                         post.comments !== undefined ? post.comments :
+                         post.commentCount !== undefined ? post.commentCount :
+                         post.comments_count !== undefined ? post.comments_count :
+                         post.comment_count !== undefined ? post.comment_count : null;
+        if (comments !== null && !isNaN(Number(comments))) {
+          totalComments += Number(comments);
+          commentsCountWeighted++;
+        }
+
+        // Shares extraction
+        const shares = post.sharesCount !== undefined ? post.sharesCount :
+                       post.shares !== undefined ? post.shares :
+                       post.shareCount !== undefined ? post.shareCount :
+                       post.shares_count !== undefined ? post.shares_count :
+                       post.share_count !== undefined ? post.share_count : null;
+        if (shares !== null && !isNaN(Number(shares))) {
+          totalShares += Number(shares);
+          sharesCountWeighted++;
+        }
+
+        // Saves extraction
+        const saves = post.savesCount !== undefined ? post.savesCount :
+                      post.saves !== undefined ? post.saves :
+                      post.saveCount !== undefined ? post.saveCount :
+                      post.saves_count !== undefined ? post.saves_count :
+                      post.collectCount !== undefined ? post.collectCount :
+                      post.collect_count !== undefined ? post.collect_count : null;
+        if (saves !== null && !isNaN(Number(saves))) {
+          totalSaves += Number(saves);
+          savesCountWeighted++;
+        }
+      }
+
+      if (likesCountWeighted > 0) {
+        calculatedLikes = String(Math.round(totalLikes / likesCountWeighted));
+      }
+      if (commentsCountWeighted > 0) {
+        calculatedComments = String(Math.round(totalComments / commentsCountWeighted));
+      }
+      if (sharesCountWeighted > 0) {
+        calculatedShares = String(Math.round(totalShares / sharesCountWeighted));
+      }
+      if (savesCountWeighted > 0) {
+        calculatedSaves = String(Math.round(totalSaves / savesCountWeighted));
+      }
+    }
+
+    // Assign final fields (only if provided in the webhook payload, otherwise leave completely blank!)
+    const averageLikes = calculatedLikes || getValFrom(payload, ['averageLikes', 'average_likes', 'likes', 'likesCount', 'likes_count', 'متوسط الإعجابات', 'الإعجابات', 'اللايكات']);
+    const averageComments = calculatedComments || getValFrom(payload, ['averageComments', 'average_comments', 'comments', 'commentsCount', 'comments_count', 'متوسط التعليقات', 'التعليقات', 'الكومنتات']);
+    const averageShares = calculatedShares || getValFrom(payload, ['averageShares', 'average_shares', 'shares', 'sharesCount', 'shares_count', 'متوسط المشاركات', 'المشاركات', 'الشير']);
+    const averageSaves = calculatedSaves || getValFrom(payload, ['averageSaves', 'average_saves', 'saves', 'savesCount', 'saves_count', 'متوسط الحفظ', 'الحفظ', 'السيف']);
+
+    const activeCommunitySize = getValFrom(payload, ['activeCommunitySize', 'active_community_size', 'community_size', 'حجم المجتمع', 'نشاط المجتمع', 'الجمهور', 'التفاعل']);
+    const first3sRetention = getValFrom(payload, ['first3sRetention', 'first_3s_retention', 'hook_rate', 'hookRate', 'first3s', 'نسبة الاحتفاظ', 'الاحتفاظ أول 3 ثواني', 'الاحتفاظ', 'هوك']);
+    const watchTimeCompletion = getValFrom(payload, ['watchTimeCompletion', 'watch_time_completion', 'completion_rate', 'completionRate', 'نسبة إكمال الفيديو', 'إكمال الفيديو', 'معدل المشاهدة', 'اكمال_الفيديو']);
+    const contentHooksExample = getValFrom(payload, ['contentHooksExample', 'content_hooks_example', 'hooks', 'خطافات المحتوى', 'مثال خطاف', 'الخطاف']);
+    const contentCaptionStyle = getValFrom(payload, ['contentCaptionStyle', 'content_caption_style', 'caption_style', 'أسلوب الوصف', 'الوصف', 'الكابشن']);
+    const postingFrequency = getValFrom(payload, ['postingFrequency', 'posting_frequency', 'frequency', 'معدل النشر', 'النشر', 'التكرار']);
+    const communityInteraction = getValFrom(payload, ['communityInteraction', 'community_interaction', 'interaction', 'التفاعل مع المجتمع', 'تفاعل المجتمع', 'الردود']);
+    const customNotes = getValFrom(payload, ['customNotes', 'custom_notes', 'notes', 'ملاحظات', 'ملاحظات إضافية', 'الملاحظات']);
+
     const mappedData = {
       id: `n8n-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      clientName: getVal(['clientName', 'client_name', 'client', 'اسم العميل', 'الاسم', 'name', 'اسم_العميل']),
-      niche: getVal(['niche', 'activity', 'النشاط', 'المجال', 'التخصص', 'القطاع', 'نوع النشاط']),
+      clientName,
+      niche,
       platform,
-      profileUrl: getVal(['profileUrl', 'profile_url', 'profile', 'رابط الحساب', 'الرابط', 'url', 'رابط_الحساب', 'رابط الحساب المستهدف']),
-      followersCount: getVal(['followersCount', 'followers_count', 'followers', 'عدد المتابعين', 'المتابعين', 'متابعين']),
-      activeCommunitySize: getVal(['activeCommunitySize', 'active_community_size', 'community_size', 'حجم المجتمع', 'نشاط المجتمع', 'الجمهور', 'التفاعل']),
-      first3sRetention: getVal(['first3sRetention', 'first_3s_retention', 'hook_rate', 'hookRate', 'first3s', 'نسبة الاحتفاظ', 'الاحتفاظ أول 3 ثواني', 'الاحتفاظ', 'هوك']),
-      watchTimeCompletion: getVal(['watchTimeCompletion', 'watch_time_completion', 'completion_rate', 'completionRate', 'نسبة إكمال الفيديو', 'إكمال الفيديو', 'معدل المشاهدة', 'اكمال_الفيديو']),
-      averageLikes: getVal(['averageLikes', 'average_likes', 'likes', 'متوسط الإعجابات', 'الإعجابات', 'اللايكات']),
-      averageComments: getVal(['averageComments', 'average_comments', 'comments', 'متوسط التعليقات', 'التعليقات', 'الكومنتات']),
-      averageShares: getVal(['averageShares', 'average_shares', 'shares', 'متوسط المشاركات', 'المشاركات', 'الشير']),
-      averageSaves: getVal(['averageSaves', 'average_saves', 'saves', 'متوسط الحفظ', 'الحفظ', 'السيف']),
-      contentHooksExample: getVal(['contentHooksExample', 'content_hooks_example', 'hooks', 'خطافات المحتوى', 'مثال خطاف', 'الخطاف']),
-      contentCaptionStyle: getVal(['contentCaptionStyle', 'content_caption_style', 'caption_style', 'أسلوب الوصف', 'الوصف', 'الكابشن']),
-      postingFrequency: getVal(['postingFrequency', 'posting_frequency', 'frequency', 'معدل النشر', 'النشر', 'التكرار']),
-      communityInteraction: getVal(['communityInteraction', 'community_interaction', 'interaction', 'التفاعل مع المجتمع', 'تفاعل المجتمع', 'الردود']),
-      customNotes: getVal(['customNotes', 'custom_notes', 'notes', 'ملاحظات', 'ملاحظات إضافية', 'الملاحظات'])
+      profileUrl,
+      followersCount,
+      activeCommunitySize,
+      first3sRetention,
+      watchTimeCompletion,
+      averageLikes,
+      averageComments,
+      averageShares,
+      averageSaves,
+      contentHooksExample,
+      contentCaptionStyle,
+      postingFrequency,
+      communityInteraction,
+      customNotes
     };
 
     // Save to file
@@ -515,22 +653,22 @@ app.post('/api/n8n/trigger', async (req, res) => {
       id: `n8n-sim-${Date.now()}`,
       timestamp: new Date().toISOString(),
       clientName: clientName || `متجر ${displayName} الرقمي`,
-      niche: niche || 'تجارة عصرية وتسويق صناعة المحتوى على منصات التواصل',
+      niche: niche || '',
       platform: platform || 'instagram',
       profileUrl,
-      followersCount: '85,400 متابع حقيقي نشط',
-      activeCommunitySize: 'حوالي 3,500 متفاعل نشط يعلقون ويشاركون بانتظام',
-      first3sRetention: '52%',
-      watchTimeCompletion: '38%',
-      averageLikes: '1850',
-      averageComments: '124',
-      averageShares: '182',
-      averageSaves: '440',
-      contentHooksExample: 'تبدأ الفيديوهات بخطاف فوري قوي: "لماذا يتجنب منافسوك الإفصاح عن هذا السر؟" أو "3 أخطاء تقتل مبيعات متجرك حالياً!"',
-      contentCaptionStyle: 'كتابة ترويجية قصيرة ومحفزة جداً للتفاعل (CTA) مع تنسيق سطور متباعد ومنظم بشكل احترافي.',
-      postingFrequency: 'بمعدل 4 مقاطع ريلز أو منشورات أسبوعياً بشكل منتظم',
-      communityInteraction: 'تفاعل ممتاز وردود فورية على الكومنتات مع توجيه الاستفسارات للخاص ورابط البايو تلقائياً.',
-      customNotes: `تم سحب وتحليل كافة بيانات الحساب ${profileUrl} تلقائياً وبدقة عالية عبر بوابة الربط الخارجي لـ n8n بنجاح وبسرعة قياسية.`
+      followersCount: '',
+      activeCommunitySize: '',
+      first3sRetention: '',
+      watchTimeCompletion: '',
+      averageLikes: '',
+      averageComments: '',
+      averageShares: '',
+      averageSaves: '',
+      contentHooksExample: '',
+      contentCaptionStyle: '',
+      postingFrequency: '',
+      communityInteraction: '',
+      customNotes: `* تم بدء فحص الحساب ${profileUrl} عبر n8n بنجاح. يرجى مراجعة وتعديل المقاييس يدوياً أدناه لتوليد التقرير المخصص.`
     };
 
     setTimeout(() => {
